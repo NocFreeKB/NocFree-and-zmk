@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: MIT
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run repository tests
+        run: ./tests/run.sh
+
+  # Pinned to the same ZMK commit as config/west.yml, so the build harness and
+  # the firmware it builds always move together.
+  firmware:
+    name: Firmware
+    needs: validate
+    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@6e2ef41e022d555b10f116e395832913f71717b3
+
+  # The firmware job above produces the user-facing artifacts but cannot run
+  # tests against its build trees. Build both halves again here and run the
+  # whole suite -- including the flash-bounds, role and linkage checks in
+  # tests/test_artifacts.py, which are skipped without a build.
+  artifacts:
+    name: Verify built artifacts
+    needs: validate
+    runs-on: ubuntu-latest
+    container:
+      image: zmkfirmware/zmk-build-arm:stable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build both halves from the pinned manifest
+        run: |
+          # Some ZMK images set this, others ship the SDK without exporting it.
+          if [ -z "${ZEPHYR_SDK_INSTALL_DIR:-}" ]; then
+            sdk=$(ls -d /opt/zephyr-sdk-* 2>/dev/null | head -1)
+            if [ -n "${sdk}" ]; then
+              export ZEPHYR_SDK_INSTALL_DIR="${sdk}"
+              export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+            fi
+          fi
+          mkdir -p /tmp/ws/config
+          cp -R config/. /tmp/ws/config/
+          cd /tmp/ws
+          west init -l config
+          west update --fetch-opt=--filter=tree:0
+          west zephyr-export
+          for role in left right; do
+            west build -s zmk/app -d "/tmp/ws/build/${role}" \
+              -b "nocfree_and_${role}/nrf52833/zmk" \
+              -- -DZMK_CONFIG=/tmp/ws/config -DZMK_EXTRA_MODULES="${GITHUB_WORKSPACE}"
+          done
+      - name: Run the full suite against the build
+        run: NOCFREE_BUILD_DIR=/tmp/ws/build ./tests/run.sh

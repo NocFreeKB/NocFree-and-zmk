@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: MIT
+
+description: |
+  Keyboard scanner for keys wired directly to PCA9555-compatible I2C expander
+  inputs.
+
+  Each scan reads every listed expander exactly once (a two-byte read of the
+  input port pair) and then resolves the declared key positions from the cached
+  port words. Scan cost is therefore one I2C transaction per expander, not one
+  per key.
+
+  The scanner owns the expander configuration and polarity-inversion registers
+  and verifies them at init, so a warm MCU reset cannot leave stale hardware
+  inversion in place. See docs/architecture.md.
+
+compatible: "nocfree,kscan-pca9555"
+
+include: kscan.yaml
+
+properties:
+  expanders:
+    type: phandles
+    required: true
+    description: |
+      Every nocfree,pca9555-keys node this scanner owns, in the order they are
+      read. All of them must sit on the same I2C controller.
+
+  key-inputs:
+    type: phandle-array
+    required: true
+    specifier-space: key
+    description: |
+      One <&expander bit> entry per key position, in KSCAN column order. Bits
+      0-7 are port 0 and bits 8-15 are port 1. Unpopulated matrix positions are
+      excluded simply by leaving them out of this list, so the column index of
+      every listed key is its index in this array.
+
+      Key inputs are active low: a pressed key pulls its expander input to
+      ground against the part's internal pull-up.
+
+  debounce-press-ms:
+    type: int
+    default: 5
+    description: Stable active time required before a press is reported.
+
+  debounce-release-ms:
+    type: int
+    default: 5
+    description: Stable inactive time required before a release is reported.
+
+  debounce-scan-period-ms:
+    type: int
+    default: 3
+    description: |
+      Poll period while any key is pressed or debouncing. One scan reads every
+      expander over I2C, so this must comfortably exceed the total transfer
+      time for the configured bus speed or the scanner cannot hold its
+      schedule. See docs/architecture.md for the budget.
+
+  poll-period-ms:
+    type: int
+    default: 10
+    description: |
+      Poll period while every key is released and stable. On a split keyboard
+      this also bounds how stale one half's view can be relative to the other.

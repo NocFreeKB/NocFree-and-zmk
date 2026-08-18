@@ -1,0 +1,185 @@
+/*
+ * Copyright (c) 2026 The NocFree ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/dts-v1/;
+
+#include <nordic/nrf52833_qiaa.dtsi>
+#include <common/nordic/nrf52833_uf2_boot_mode.dtsi>
+#include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/zmk/matrix_transform.h>
+
+#include "nocfree_and-pinctrl.dtsi"
+#include "nocfree_and-layouts.dtsi"
+
+/ {
+    model = "NocFree &";
+    compatible = "nocfree,nocfree-and";
+
+    chosen {
+        zephyr,code-partition = &code_partition;
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zmk,physical-layout = &ansi_layout;
+    };
+
+    /*
+     * The keys are not an electrical row/column matrix: every key has its own
+     * expander input. The transform is therefore a single logical row of 84
+     * independent columns, listed here in visual reading order.
+     *
+     * Columns 0-36 are the left half and columns 37-83 are the right half.
+     * Each half reports its own local column index; the right half shifts its
+     * indices into the second range with col-offset, so both halves resolve to
+     * the same global keymap positions. That is what lets the split peripheral
+     * send absolute positions to the central.
+     */
+    matrix_transform0: keymap_transform_0 {
+        compatible = "zmk,matrix-transform";
+        rows = <1>;
+        columns = <84>;
+
+        map = <
+            /* Function row */
+            RC(0,0)  RC(0,1)  RC(0,2)  RC(0,3)  RC(0,4)  RC(0,5)  RC(0,6)
+            RC(0,37) RC(0,38) RC(0,39) RC(0,40) RC(0,41) RC(0,42) RC(0,43) RC(0,44)
+            /* Number row */
+            RC(0,7)  RC(0,8)  RC(0,9)  RC(0,10) RC(0,11) RC(0,12) RC(0,13)
+            RC(0,45) RC(0,46) RC(0,47) RC(0,48) RC(0,49) RC(0,50) RC(0,51) RC(0,52)
+            /* Tab row */
+            RC(0,14) RC(0,15) RC(0,16) RC(0,17) RC(0,18) RC(0,19)
+            RC(0,53) RC(0,54) RC(0,55) RC(0,56) RC(0,57) RC(0,58) RC(0,59) RC(0,60)
+            /* Home row */
+            RC(0,20) RC(0,21) RC(0,22) RC(0,23) RC(0,24) RC(0,25)
+            RC(0,61) RC(0,62) RC(0,63) RC(0,64) RC(0,65) RC(0,66) RC(0,67) RC(0,68)
+            /* Shift row */
+            RC(0,26) RC(0,27) RC(0,28) RC(0,29) RC(0,30) RC(0,31)
+            RC(0,69) RC(0,70) RC(0,71) RC(0,72) RC(0,73) RC(0,74) RC(0,75) RC(0,76)
+            /* Bottom row */
+            RC(0,32) RC(0,33) RC(0,34) RC(0,35) RC(0,36)
+            RC(0,77) RC(0,78) RC(0,79) RC(0,80) RC(0,81) RC(0,82) RC(0,83)
+        >;
+    };
+};
+
+/*
+ * No GPIO pin is used by this port -- the only pins it configures are the two
+ * I2C lines, through pinctrl. The controllers are enabled so the board can be
+ * extended without a devicetree change, and GPIOTE is required alongside them
+ * by the nRF GPIO driver.
+ */
+&gpiote {
+    status = "okay";
+};
+
+&gpio0 {
+    status = "okay";
+};
+
+&gpio1 {
+    status = "okay";
+};
+
+/*
+ * Key-input bus.
+ *
+ * Standard mode (100 kHz) is the conservative default for this port. NocFree
+ * documents 400 kHz for the factory firmware and the PCA9555 family is rated
+ * for it, but bus margin depends on the interconnect capacitance and pull-up
+ * values of a specific unit, which this port has not measured. Any bus that
+ * works at 400 kHz also works at 100 kHz, so standard mode is the setting that
+ * is safe under either assumption. See docs/architecture.md before raising it.
+ */
+&i2c0 {
+    status = "okay";
+    clock-frequency = <I2C_BITRATE_STANDARD>;
+    pinctrl-0 = <&i2c0_default>;
+    pinctrl-1 = <&i2c0_sleep>;
+    pinctrl-names = "default", "sleep";
+
+    pca20: keys@20 {
+        compatible = "nocfree,pca9555-keys";
+        reg = <0x20>;
+        #key-cells = <1>;
+        status = "okay";
+    };
+
+    pca22: keys@22 {
+        compatible = "nocfree,pca9555-keys";
+        reg = <0x22>;
+        #key-cells = <1>;
+        status = "okay";
+    };
+
+    pca24: keys@24 {
+        compatible = "nocfree,pca9555-keys";
+        reg = <0x24>;
+        #key-cells = <1>;
+        status = "okay";
+    };
+};
+
+zephyr_udc0: &usbd {
+    status = "okay";
+
+    cdc_acm_uart0: cdc_acm_uart0 {
+        compatible = "zephyr,cdc-acm-uart";
+    };
+};
+
+/*
+ * Flash layout.
+ *
+ * The device ships with the Adafruit nRF52 UF2 bootloader and an S140 v7
+ * SoftDevice. Both regions and the factory filesystem are preserved so the
+ * vendor rollback path stays intact; this firmware only ever occupies the
+ * application region.
+ *
+ * The boundaries come from the two public Adafruit linker scripts:
+ *   - Adafruit_nRF52_Arduino 1.7.0 cores/nRF5/linker/nrf52833_s140_v7.ld
+ *       FLASH ORIGIN = 0x27000, LENGTH = 0x6D000 - 0x27000
+ *   - Adafruit_nRF52_Bootloader linker/nrf52833.ld
+ *       bootloader 0x74000, config 0x7D800, MBR params 0x7E000,
+ *       bootloader settings 0x7F000
+ *
+ *   0x00000..0x26fff  MBR + S140 v7          preserved, never written
+ *   0x27000..0x64fff  ZMK application        248 KiB
+ *   0x65000..0x6cfff  ZMK settings (NVS)      32 KiB
+ *   0x6d000..0x73fff  factory filesystem     preserved, deliberately unmapped
+ *   0x74000..0x7ffff  bootloader + metadata  preserved, never written
+ *
+ * Verify this against INFO_UF2.TXT on the bootloader drive before flashing.
+ */
+&flash0 {
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        sd_partition: partition@0 {
+            label = "softdevice";
+            reg = <0x00000000 0x00027000>;
+            read-only;
+        };
+
+        code_partition: partition@27000 {
+            label = "code";
+            reg = <0x00027000 0x0003e000>;
+        };
+
+        storage_partition: partition@65000 {
+            label = "storage";
+            reg = <0x00065000 0x00008000>;
+        };
+
+        /* 0x6d000..0x73fff is the preserved factory filesystem. */
+
+        boot_partition: partition@74000 {
+            label = "adafruit_boot";
+            reg = <0x00074000 0x0000c000>;
+            read-only;
+        };
+    };
+};

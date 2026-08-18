@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: MIT
+
+config NOCFREE_KSCAN_PCA9555
+    bool "NocFree PCA9555 key-input scanner"
+    default y
+    depends on DT_HAS_NOCFREE_KSCAN_PCA9555_ENABLED
+    select I2C
+    select KSCAN
+    select ZMK_DEBOUNCE
+    help
+      Poll PCA9555-compatible I2C expanders that are wired as independent key
+      inputs and report them through ZMK's KSCAN interface.
+
+      The driver owns the expander registers directly instead of layering on
+      Zephyr's generic PCA GPIO driver. See docs/architecture.md for why that
+      is required on the ZMK-pinned Zephyr revision.
+
+if NOCFREE_KSCAN_PCA9555
+
+config NOCFREE_KSCAN_PCA9555_INIT_PRIORITY
+    int "NocFree PCA9555 scanner init priority"
+    default 90
+    help
+      Must be later than CONFIG_I2C_INIT_PRIORITY so the bus is available when
+      the scanner writes and verifies the expander configuration.
+
+config NOCFREE_KSCAN_PCA9555_STACK_SIZE
+    int "NocFree PCA9555 scan thread stack size"
+    default 1024
+    help
+      Stack for the dedicated scan queue. The scan itself is shallow; the depth
+      is the synchronous I2C transfer.
+
+config NOCFREE_KSCAN_PCA9555_PRIORITY
+    int "NocFree PCA9555 scan thread priority"
+    default 4
+    help
+      Preemptible priority for the scan queue. Scanning must not run on the
+      cooperative system work queue, where each blocking expander read would
+      delay the key events the scan has just produced and, on a split central,
+      the events arriving from the peripheral.
+
+endif # NOCFREE_KSCAN_PCA9555
+
+config NOCFREE_RECOVERY_CDC_1200_TOUCH
+    bool "Enter the preserved UF2 bootloader when CDC baud is set to 1200"
+    default y
+    depends on USB_CDC_ACM && CDC_ACM_DTE_RATE_CALLBACK_SUPPORT
+    depends on DT_HAS_ZEPHYR_CDC_ACM_UART_ENABLED
+    depends on RETENTION_BOOT_MODE
+    help
+      Provide the conventional 1200-baud touch recovery trigger on a USB CDC
+      interface. Unlike the keymap's &bootloader binding -- which acts on the
+      half whose key triggered it and, for a split peripheral, needs a working
+      split link -- this path only needs USB, so it recovers a half no matter
+      what state its radio or pairing is in.

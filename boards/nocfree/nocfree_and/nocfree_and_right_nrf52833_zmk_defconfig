@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MIT
+
+CONFIG_ARM_MPU=y
+CONFIG_HW_STACK_PROTECTION=y
+
+CONFIG_GPIO=y
+CONFIG_PINCTRL=y
+CONFIG_I2C=y
+
+# Link and flash only into the preserved application slot.
+CONFIG_USE_DT_CODE_PARTITION=y
+CONFIG_BUILD_OUTPUT_UF2=y
+
+# Settings live in the dedicated NVS partition, clear of the factory filesystem.
+CONFIG_MPU_ALLOW_FLASH_WRITE=y
+CONFIG_NVS=y
+CONFIG_SETTINGS_NVS=y
+CONFIG_FLASH=y
+CONFIG_FLASH_PAGE_LAYOUT=y
+CONFIG_FLASH_MAP=y
+
+# Warm-reset request into the preserved Adafruit UF2 bootloader.
+CONFIG_RETAINED_MEM=y
+CONFIG_RETENTION=y
+CONFIG_RETENTION_BOOT_MODE=y
+
+# See the left defconfig for why the internal RC oscillator is used.
+CONFIG_CLOCK_CONTROL_NRF=y
+CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
+CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION=y
+
+# The right half is a split peripheral: it has no host-facing HID output.
+CONFIG_ZMK_BLE=y
+
+# No battery source is declared: the ADC and divider-enable pins are not
+# verified by this port. Reporting would otherwise default on and advertise a
+# Battery Service with nothing behind it.
+CONFIG_ZMK_BATTERY_REPORTING=n
+
+# USB is brought up only for the CDC recovery interface, so this half keeps a
+# host-driven bootloader path that does not depend on the split link. (Fn+Del
+# does reach this half's bootloader, but only while it is connected to the
+# central.) With CONFIG_ZMK_USB unset ZMK never calls usb_enable(), so
+# INITIALIZE_AT_BOOT is the line that actually enumerates USB here.
+CONFIG_USB_DEVICE_STACK=y
+CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=y
+CONFIG_SERIAL=y
+CONFIG_UART_LINE_CTRL=y
+CONFIG_USB_CDC_ACM=y
+CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT=y

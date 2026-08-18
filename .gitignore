@@ -1,0 +1,12 @@
+# Local west workspace and build output. Builds run in a sibling directory,
+# outside this repository; see docs/build.md.
+/.west/
+/build/
+
+*.uf2
+*.bin
+*.hex
+*.elf
+
+__pycache__/
+*.pyc

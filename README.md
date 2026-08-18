@@ -132,3 +132,17 @@ These values come from the current firmware and do not replace a complete schema
 Community-developed ZMK support code and its accompanying documentation are licensed under the [MIT License](https://opensource.org/license/mit). This license applies only to content explicitly identified as community ZMK support. It does not apply to NocFree keyboard hardware, schematics, PCB designs, mechanical designs, manufacturing materials, trademarks, bootloaders, or factory firmware.
 
 Contributors must submit only content they have the right to release under the MIT License. Third-party projects and included third-party content remain subject to their original licenses.
+
+## 9. Community ZMK Module in This Repository
+
+This repository also contains a community ZMK keyboard module, `zmk-keyboard-nocfree-and`, providing a minimum ANSI left/right port built on the interfaces documented above. The left half is the ZMK split central and presents Bluetooth or USB HID to the computer; the right half is a Bluetooth split peripheral. It is community work covered by section 8, not official NocFree firmware, and the disclaimer in section 1 applies in full.
+
+Numpad, factory USB receiver, 2.4 GHz, battery reporting, backlighting, and indicators are deliberately not included.
+
+| Document | Contents |
+|---|---|
+| [docs/build.md](docs/build.md) | Building both images from pinned public dependencies |
+| [docs/architecture.md](docs/architecture.md) | Roles, key scanning, flash layout, and the engineering decisions behind them |
+| [docs/recovery.md](docs/recovery.md) | Bootloader preservation, recovery paths, and stop conditions |
+| [docs/limitations.md](docs/limitations.md) | What is excluded, known rough edges, and claims not made |
+| [docs/testing.md](docs/testing.md) | Automated checks and the physical verification a build still needs |

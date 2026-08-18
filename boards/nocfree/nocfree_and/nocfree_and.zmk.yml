@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MIT
+
+file_format: "1"
+id: nocfree_and
+name: NocFree &
+type: board
+arch: arm
+url: https://github.com/NocFreeKB/NocFree-and-zmk
+description: Community ZMK support for the NocFree & ANSI split keyboard
+manufacturer: NocFree
+features:
+  - keys
+outputs:
+  - usb
+  - ble
+siblings:
+  - nocfree_and_left//zmk
+  - nocfree_and_right//zmk

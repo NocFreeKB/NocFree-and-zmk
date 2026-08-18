@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT
+
+include:
+  - board: nocfree_and_left/nrf52833/zmk
+    artifact-name: nocfree_and_left
+  - board: nocfree_and_right/nrf52833/zmk
+    artifact-name: nocfree_and_right
