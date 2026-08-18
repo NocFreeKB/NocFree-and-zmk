@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MIT
+
+if BOARD_NOCFREE_AND_LEFT
+
+config ZMK_KEYBOARD_NAME
+    default "NocFree &"
+
+# The left half is the split central and the half that talks to the host.
+config ZMK_SPLIT_ROLE_CENTRAL
+    default y
+
+endif # BOARD_NOCFREE_AND_LEFT
+
+if BOARD_NOCFREE_AND_RIGHT
+
+config ZMK_KEYBOARD_NAME
+    default "NocFree & Right"
+
+endif # BOARD_NOCFREE_AND_RIGHT
+
+if BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT
+
+config BOARD
+    default "nocfree_and"
+
+config ZMK_SPLIT
+    default y
+
+endif # BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT

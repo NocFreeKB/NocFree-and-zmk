@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MIT
+#
+# Devicetree vendor prefixes defined by this module.
+
+nocfree	NocFree

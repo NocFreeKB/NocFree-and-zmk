@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+
+name: zmk-keyboard-nocfree-and
+
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    board_root: .
+    dts_root: .

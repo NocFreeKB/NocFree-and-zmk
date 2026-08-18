@@ -1,0 +1,21 @@
+/*
+ * Copyright (c) 2026 The NocFree ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/ {
+    /*
+     * The `keys` property (per-key width/height/x/y) is deliberately absent.
+     * It only drives ZMK Studio's visual editor, which this baseline does not
+     * enable, and the physical key geometry of this keyboard has not been
+     * measured by this port. Adding guessed geometry would be worse than
+     * having none. A contributor who measures the board can add `keys` and
+     * enable CONFIG_ZMK_STUDIO in one change.
+     */
+    ansi_layout: nocfree_and_ansi_layout {
+        compatible = "zmk,physical-layout";
+        display-name = "ANSI";
+        transform = <&matrix_transform0>;
+    };
+};

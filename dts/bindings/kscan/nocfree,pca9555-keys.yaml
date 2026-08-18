@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+
+description: |
+  A PCA9555-compatible 16-bit I2C expander whose two 8-bit ports are wired as
+  independent key inputs.
+
+  This node carries no driver of its own. It exists so that the
+  nocfree,kscan-pca9555 scanner can address the part through the normal
+  Zephyr I2C devicetree bus model, and so individual key positions can be
+  written as <&expander bit> in the scanner's key-inputs list.
+
+compatible: "nocfree,pca9555-keys"
+
+include: [i2c-device.yaml]
+
+properties:
+  "#key-cells":
+    type: int
+    required: true
+    const: 1
+
+key-cells:
+  - bit

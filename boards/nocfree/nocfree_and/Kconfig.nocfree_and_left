@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+
+config BOARD_NOCFREE_AND_LEFT
+    select SOC_NRF52833_QIAA
+    select ZMK_BOARD_COMPAT
+    imply RETAINED_MEM
+    imply RETENTION
+    imply RETENTION_BOOT_MODE

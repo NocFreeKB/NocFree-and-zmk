@@ -1,0 +1,57 @@
+/*
+ * Copyright (c) 2026 The NocFree ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "nocfree_and.dtsi"
+
+/ {
+    /*
+     * Key positions, in KSCAN column order. The list index is the column, so
+     * unpopulated expander bits are excluded simply by being absent -- there is
+     * no separate "ignore" table to keep in sync.
+     *
+     * This half owns global keymap positions 37-83. Its 47 local
+     * columns are shifted into that range by the col-offset below, so the
+     * positions it sends to the central are already global.
+     *
+     * Timing budget at 100 kHz: one two-byte port-pair read costs roughly
+     * 480 us, so a three-expander scan costs roughly 1.5 ms. The active period
+     * must exceed that, hence 3 ms rather than ZMK's 1 ms default. Raising the
+     * bus to 400 kHz would bring a scan to about 0.4 ms and allow 1 ms.
+     */
+    kscan0: kscan {
+        compatible = "nocfree,kscan-pca9555";
+        status = "okay";
+
+        expanders = <&pca20>, <&pca22>, <&pca24>;
+
+        poll-period-ms = <10>;
+        debounce-scan-period-ms = <3>;
+        debounce-press-ms = <5>;
+        debounce-release-ms = <5>;
+
+        key-inputs =
+            /* Esc / function row: pca20 port 0, columns 0-7 */
+            <&pca20 0>, <&pca20 1>, <&pca20 2>, <&pca20 3>, <&pca20 4>, <&pca20 5>, <&pca20 6>, <&pca20 7>,
+            /* Number row: pca20 port 1, columns 8-15 */
+            <&pca20 8>, <&pca20 9>, <&pca20 10>, <&pca20 11>, <&pca20 12>, <&pca20 13>, <&pca20 14>, <&pca20 15>,
+            /* Tab row: pca22 port 0, columns 16-23 */
+            <&pca22 0>, <&pca22 1>, <&pca22 2>, <&pca22 3>, <&pca22 4>, <&pca22 5>, <&pca22 6>, <&pca22 7>,
+            /* Home row: pca22 port 1, columns 24-31 */
+            <&pca22 8>, <&pca22 9>, <&pca22 10>, <&pca22 11>, <&pca22 12>, <&pca22 13>, <&pca22 14>, <&pca22 15>,
+            /* Shift row: pca24 port 0, columns 32-39 */
+            <&pca24 0>, <&pca24 1>, <&pca24 2>, <&pca24 3>, <&pca24 4>, <&pca24 5>, <&pca24 6>, <&pca24 7>,
+            /* Bottom row: pca24 port 1, columns 40-46 */
+            <&pca24 8>, <&pca24 9>, <&pca24 10>, <&pca24 11>, <&pca24 12>, <&pca24 13>, <&pca24 14>;
+    };
+};
+
+&ansi_layout {
+    kscan = <&kscan0>;
+};
+
+&matrix_transform0 {
+    col-offset = <37>;
+};

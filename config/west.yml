@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT
+
+# Pinned build inputs. Everything here is public: this manifest plus this
+# repository is enough to reproduce both firmware images from a clean checkout.
+manifest:
+  remotes:
+    - name: zmkfirmware
+      url-base: https://github.com/zmkfirmware
+  projects:
+    - name: zmk
+      remote: zmkfirmware
+      revision: 6e2ef41e022d555b10f116e395832913f71717b3
+      import: app/west.yml
+  self:
+    path: config
