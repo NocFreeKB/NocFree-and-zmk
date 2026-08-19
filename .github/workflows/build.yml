@@ -61,4 +61,6 @@ jobs:
               -- -DZMK_CONFIG=/tmp/ws/config -DZMK_EXTRA_MODULES="${GITHUB_WORKSPACE}"
           done
       - name: Run the full suite against the build
-        run: NOCFREE_BUILD_DIR=/tmp/ws/build ./tests/run.sh
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          NOCFREE_BUILD_DIR=/tmp/ws/build ./tests/run.sh
