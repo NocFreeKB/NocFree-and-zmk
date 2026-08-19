@@ -48,3 +48,26 @@ CONFIG_SERIAL=y
 CONFIG_UART_LINE_CTRL=y
 CONFIG_USB_CDC_ACM=y
 CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT=y
+
+# Keep the split link on the 1M PHY; see the left defconfig for the full
+# rationale. Set on both halves so neither side can negotiate 2M.
+CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y
+
+# Deeper BLE TX pipeline. This half is where the known ZMK gap bites: the
+# split peripheral dequeues a complete key-state bitmap before calling
+# bt_gatt_notify(), and if submission fails (all TX buffers occupied by
+# packets awaiting retransmission over a marginal link) that state is dropped
+# with only a debug log. A dropped final release leaves the central holding a
+# stale key until the next key event from this half. More buffers mean the
+# stack keeps accepting states across a longer fade and delivers them when
+# the link recovers.
+CONFIG_BT_BUF_ACL_TX_COUNT=8
+CONFIG_BT_L2CAP_TX_BUF_COUNT=8
+CONFIG_BT_CONN_TX_MAX=8
+
+# Queue of complete 16-byte key-state bitmaps awaiting transmission to the
+# central. Overflow discards the oldest entry, so the newest state always
+# survives and the link converges to the true state on recovery; a deeper
+# queue widens the window in which no intermediate keystroke is lost.
+# 32 entries x 16 B = 512 B of RAM.
+CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32
