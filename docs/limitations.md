@@ -53,7 +53,23 @@ is left alone rather than configured with a guess.
 
 ## Hardware status
 
-Observed on one ANSI unit, on macOS, using the images built from this commit:
+Observed on one ANSI unit, on macOS.
+
+With the split-link images (the `feat: harden the split link at desk
+distances` commit; both halves' images read back from the bootloader after
+flashing and verified byte-for-byte at every written address), on 2026-08-19:
+
+- Informal stress typing with the halves roughly 50 cm apart and objects
+  placed between them showed none of the previous symptoms. With the baseline
+  images the same unit showed lag, cross-half reordering and occasional stuck
+  keys from roughly 30 cm even unobstructed.
+- At roughly 80 cm separation with objects between the halves, the link
+  became patchy again. Raising transmit power is the next available lever and
+  remains a deliberate, separate decision.
+- Distances are approximate and uninstrumented, from normal desk use.
+
+With the baseline images (the `feat: minimum ANSI left/right ZMK port`
+commit):
 
 - Both halves install through the preserved bootloader and boot. The bootloader
   reports `SoftDevice: S140 7.3.0`, which is what puts the application base at
@@ -71,8 +87,9 @@ one host operating system, and one hardware revision.
 
 ## Claims this port does not make
 
-- Battery-powered operation is untested; the above was observed with both
-  halves on USB power.
+- Battery-powered operation has since been observed in normal use, but only
+  informally; the baseline acceptance itself was recorded with both halves on
+  USB power, and no battery life figures are claimed.
 - Reconnection after a power cycle, and rollback to factory firmware, have not
   been exercised.
 - No battery life, latency, idle current, or endurance figures.
