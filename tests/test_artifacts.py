@@ -112,6 +112,27 @@ class ArtifactTest(unittest.TestCase):
         self.assertEqual(right.get("CONFIG_USB_DEVICE_STACK"), "y")
         self.assertEqual(right.get("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT"), "y")
 
+    def test_split_link_resolved_to_the_robust_phy_and_deep_tx_pipeline(self):
+        """CONFIG_ZMK_BLE_EXPERIMENTAL_CONN only requests the 1M PHY; whether
+        the controller's 2M PHY actually resolved away is decided by Kconfig
+        default ordering. Assert the outcome in the compiled config so a ZMK
+        bump that re-enables 2M, or a silently ignored buffer setting, fails
+        here instead of on the desk."""
+        for role in self.ROLES:
+            config = kconfig(role)
+            with self.subTest(role):
+                self.assertEqual(config.get("CONFIG_ZMK_BLE_EXPERIMENTAL_CONN"), "y")
+                self.assertNotEqual(config.get("CONFIG_BT_CTLR_PHY_2M"), "y")
+                self.assertEqual(config.get("CONFIG_BT_BUF_ACL_TX_COUNT"), "8")
+                self.assertEqual(config.get("CONFIG_BT_L2CAP_TX_BUF_COUNT"), "8")
+                self.assertEqual(config.get("CONFIG_BT_CONN_TX_MAX"), "8")
+        self.assertEqual(
+            kconfig("left").get("CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE"), "16"
+        )
+        self.assertEqual(
+            kconfig("right").get("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE"), "32"
+        )
+
     def test_excluded_features_are_absent(self):
         for role in self.ROLES:
             config = kconfig(role)

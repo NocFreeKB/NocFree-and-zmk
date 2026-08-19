@@ -37,10 +37,16 @@ is left alone rather than configured with a guess.
   retail ANSI keycaps (`Fn` / `Control` / `Option` / `Command` from the outside
   in). This is the least certain part of the map. It is a keymap edit only and
   does not affect the electrical mapping.
-- **Split reliability.** This port uses ZMK's stock split behaviour with no
-  additions. ZMK releases held positions when a peripheral disconnects, but
-  there is no periodic full-state repair, so a dropped final notification is
-  corrected on the next key event rather than immediately.
+- **Split reliability.** This port uses ZMK's stock split protocol with no
+  code additions, tuned for link margin: both halves stay on the more
+  sensitive 1M PHY (`CONFIG_ZMK_BLE_EXPERIMENTAL_CONN`) and carry a deeper
+  BLE TX pipeline and deeper state queues, because the stock peripheral
+  drops a key-state notification the stack refuses to accept. Across a long
+  enough fade that drop can still happen — there is no periodic full-state
+  repair — so a dropped final notification is corrected by the next key
+  event from that half, or by the release-everything cleanup on disconnect,
+  rather than immediately. Transmit power remains at the radio's default;
+  raising it is a deliberate, separate decision (see architecture.md).
 - **Split latency.** The two halves poll on independent schedules, so
   cross-half event ordering can be off by up to one idle poll period plus the
   BLE connection interval. No latency figure is claimed.

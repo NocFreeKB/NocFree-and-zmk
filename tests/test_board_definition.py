@@ -290,6 +290,25 @@ class RoleTest(unittest.TestCase):
         self.assertIn("CONFIG_USB_DEVICE_STACK=y", right)
         self.assertIn("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=y", right)
 
+    def test_split_link_is_tuned_for_link_margin(self):
+        """The split link favours reliability over throughput: ZMK's
+        EXPERIMENTAL_CONN keeps every link on the more sensitive 1M PHY (at
+        the pinned revision its only effect is disabling the controller's
+        2M PHY), and a deeper BLE TX pipeline plus deeper state queues cover
+        the known upstream gap where the split peripheral drops a key-state
+        notification the stack refuses to accept. Both halves must set the
+        link options or the PHY can still be negotiated up."""
+        left = (BOARD / "nocfree_and_left_nrf52833_zmk_defconfig").read_text()
+        right = (BOARD / "nocfree_and_right_nrf52833_zmk_defconfig").read_text()
+        for name, text in (("left", left), ("right", right)):
+            with self.subTest(name):
+                self.assertIn("CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y", text)
+                self.assertIn("CONFIG_BT_BUF_ACL_TX_COUNT=8", text)
+                self.assertIn("CONFIG_BT_L2CAP_TX_BUF_COUNT=8", text)
+                self.assertIn("CONFIG_BT_CONN_TX_MAX=8", text)
+        self.assertIn("CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE=16", left)
+        self.assertIn("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32", right)
+
     def test_low_frequency_clock_stays_on_the_internal_rc(self):
         """No 32.768 kHz crystal is confirmed fitted. Selecting an absent
         crystal silently stops the BLE controller on both halves."""
