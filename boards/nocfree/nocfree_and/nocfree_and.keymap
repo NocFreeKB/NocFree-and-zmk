@@ -51,13 +51,18 @@
         };
 
         /*
-         * Function layer. Deliberately sparse: Bluetooth profile management,
-         * output selection, and the two recovery behaviours.
+         * Function layer: host controls, Bluetooth profile management, output
+         * selection, and the two recovery behaviours.
          *
          *   Fn+1..Fn+5   select Bluetooth profile 0..4
          *   Fn+0         clear the selected Bluetooth profile
          *   Fn+U         send HID over USB
          *   Fn+B         send HID over Bluetooth
+         *   Fn+F1/F2     display brightness down/up
+         *   Fn+F3        show all windows / Mission Control
+         *   Fn+F4        search / Spotlight
+         *   Fn+F5/F6     unavailable (keyboard backlight is not implemented)
+         *   Fn+F7/F8/F9  previous track, play/pause, next track
          *   Fn+F10/11/12 mute, volume down, volume up
          *   Fn+Esc       reset the left half
          *   Fn+Delete    reboot the right half into its bootloader
@@ -71,8 +76,8 @@
         function_layer {
             display-name = "Fn";
             bindings = <
-                &sys_reset &trans     &trans     &trans     &trans     &trans     &trans
-                &trans     &trans     &trans     &kp C_MUTE &kp C_VOL_DN &kp C_VOL_UP &trans &trans
+                &sys_reset &kp C_BRI_DN &kp C_BRI_UP &kp C_AC_DESKTOP_SHOW_ALL_WINDOWS &kp C_AC_SEARCH &trans &trans
+                &kp C_PREVIOUS &kp C_PLAY_PAUSE &kp C_NEXT &kp C_MUTE &kp C_VOL_DN &kp C_VOL_UP &trans &trans
 
                 &trans     &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &bt BT_SEL 3 &bt BT_SEL 4 &trans
                 &trans     &trans     &trans     &bt BT_CLR &trans     &trans     &trans     &trans

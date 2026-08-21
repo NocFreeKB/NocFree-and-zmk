@@ -124,6 +124,30 @@ class KeymapTest(unittest.TestCase):
     def test_default_layer_is_the_expected_ansi_map(self):
         self.assertEqual(self.layers()["default_layer"], spec.DEFAULT_LAYER)
 
+    def test_function_row_matches_the_published_shortcuts(self):
+        """Function-row contract from https://www.nocfree.com/pages/nocfree-and-manual."""
+        layers = self.layers()
+        expected = {
+            "kp F1": "kp C_BRI_DN",
+            "kp F2": "kp C_BRI_UP",
+            "kp F3": "kp C_AC_DESKTOP_SHOW_ALL_WINDOWS",
+            "kp F4": "kp C_AC_SEARCH",
+            # F5/F6 control the keyboard backlight, which this port cannot safely drive yet.
+            "kp F5": "trans",
+            "kp F6": "trans",
+            "kp F7": "kp C_PREVIOUS",
+            "kp F8": "kp C_PLAY_PAUSE",
+            "kp F9": "kp C_NEXT",
+            "kp F10": "kp C_MUTE",
+            "kp F11": "kp C_VOL_DN",
+            "kp F12": "kp C_VOL_UP",
+        }
+
+        for base_binding, expected_function in expected.items():
+            with self.subTest(base_binding):
+                position = layers["default_layer"].index(base_binding)
+                self.assertEqual(layers["function_layer"][position], expected_function)
+
     def test_recovery_and_output_bindings_are_reachable(self):
         function = self.layers()["function_layer"]
         for binding in ("bootloader", "sys_reset", "out OUT_USB", "out OUT_BLE", "bt BT_CLR"):
