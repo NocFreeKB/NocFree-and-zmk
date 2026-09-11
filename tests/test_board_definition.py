@@ -15,8 +15,10 @@ BOARD = ROOT / "boards/nocfree/nocfree_and"
 
 LEFT_DTS = BOARD / "nocfree_and_left_nrf52833_zmk.dts"
 RIGHT_DTS = BOARD / "nocfree_and_right_nrf52833_zmk.dts"
+NUMPAD_DTS = BOARD / "nocfree_and_numpad_nrf52833_zmk.dts"
 SHARED_DTSI = BOARD / "nocfree_and.dtsi"
 KEYMAP = BOARD / "nocfree_and.keymap"
+ROLE_DTS = (LEFT_DTS, RIGHT_DTS, NUMPAD_DTS)
 
 
 def strip_comments(text: str) -> str:
@@ -53,14 +55,22 @@ class KeyInputTest(unittest.TestCase):
         self.assertEqual(key_inputs(RIGHT_DTS), spec.RIGHT_INPUTS)
         self.assertEqual(len(key_inputs(RIGHT_DTS)), spec.RIGHT_KEYS)
 
+    def test_numpad_inputs_are_exact(self):
+        self.assertEqual(key_inputs(NUMPAD_DTS), spec.NUMPAD_INPUTS)
+        self.assertEqual(len(key_inputs(NUMPAD_DTS)), spec.NUMPAD_KEYS)
+
     def test_no_input_is_declared_twice(self):
-        for path in (LEFT_DTS, RIGHT_DTS):
+        for path in ROLE_DTS:
             with self.subTest(path.name):
                 inputs = key_inputs(path)
                 self.assertEqual(len(inputs), len(set(inputs)))
 
     def test_unpopulated_expander_bits_are_excluded(self):
-        for path, unused in ((LEFT_DTS, spec.LEFT_UNUSED), (RIGHT_DTS, spec.RIGHT_UNUSED)):
+        for path, unused in (
+            (LEFT_DTS, spec.LEFT_UNUSED),
+            (RIGHT_DTS, spec.RIGHT_UNUSED),
+            (NUMPAD_DTS, spec.NUMPAD_UNUSED),
+        ):
             declared = set(key_inputs(path))
             for label, bits in unused.items():
                 for bit in bits:
@@ -68,7 +78,7 @@ class KeyInputTest(unittest.TestCase):
                         self.assertNotIn((label, bit), declared)
 
     def test_every_declared_bit_is_within_the_part(self):
-        for path in (LEFT_DTS, RIGHT_DTS):
+        for path in ROLE_DTS:
             for label, bit in key_inputs(path):
                 with self.subTest(f"{path.name} {label} {bit}"):
                     self.assertIn(bit, spec.ALL_BITS)
@@ -94,12 +104,13 @@ class TransformTest(unittest.TestCase):
             str(spec.TOTAL_KEYS),
         )
 
-    def test_only_the_right_half_offsets_its_columns(self):
+    def test_only_the_peripherals_offset_their_columns(self):
         self.assertRegex(read(RIGHT_DTS), rf"col-offset\s*=\s*<{spec.RIGHT_COL_OFFSET}>")
+        self.assertRegex(read(NUMPAD_DTS), rf"col-offset\s*=\s*<{spec.NUMPAD_COL_OFFSET}>")
         self.assertNotIn("col-offset", read(LEFT_DTS))
 
     def test_offset_columns_stay_inside_the_transform(self):
-        highest = spec.RIGHT_COL_OFFSET + spec.RIGHT_KEYS - 1
+        highest = spec.NUMPAD_COL_OFFSET + spec.NUMPAD_KEYS - 1
         self.assertEqual(highest, spec.TOTAL_KEYS - 1)
 
 
@@ -158,7 +169,11 @@ class KeymapTest(unittest.TestCase):
         """Bluetooth pairing and recovery are only reachable through Fn."""
         default = spec.DEFAULT_LAYER
         left = [default[i] for i, p in enumerate(spec.TRANSFORM) if p < spec.RIGHT_COL_OFFSET]
-        right = [default[i] for i, p in enumerate(spec.TRANSFORM) if p >= spec.RIGHT_COL_OFFSET]
+        right = [
+            default[i]
+            for i, p in enumerate(spec.TRANSFORM)
+            if spec.RIGHT_COL_OFFSET <= p < spec.NUMPAD_COL_OFFSET
+        ]
         self.assertIn("mo 1", left)
         self.assertIn("mo 1", right)
 
@@ -214,6 +229,7 @@ class FlashLayoutTest(unittest.TestCase):
         for path in (
             BOARD / "nocfree_and_left_nrf52833_zmk_defconfig",
             BOARD / "nocfree_and_right_nrf52833_zmk_defconfig",
+            BOARD / "nocfree_and_numpad_nrf52833_zmk_defconfig",
         ):
             with self.subTest(path.name):
                 self.assertIn("CONFIG_USE_DT_CODE_PARTITION=y", path.read_text())
@@ -228,54 +244,92 @@ class BusTest(unittest.TestCase):
         }
         self.assertEqual(found, spec.EXPANDER_ADDRESSES)
 
-    def test_bus_uses_the_conservative_standard_mode(self):
-        self.assertRegex(read(SHARED_DTSI), r"clock-frequency\s*=\s*<I2C_BITRATE_STANDARD>")
+    def bus_hz(self) -> int:
+        match = re.search(r"clock-frequency\s*=\s*<(I2C_BITRATE_\w+)>", read(SHARED_DTSI))
+        self.assertIsNotNone(match)
+        return spec.BUS_SPEEDS[match.group(1)]
 
-    def test_active_scan_period_exceeds_the_bus_transfer_time(self):
+    def test_bus_runs_in_fast_mode_as_the_factory_firmware_does(self):
+        """NocFree's guide documents 400 kHz for the factory firmware on this
+        bus. The port ran 100 kHz before adopting that speed."""
+        self.assertEqual(spec.BUS_HZ, 400_000)
+        self.assertEqual(self.bus_hz(), spec.BUS_HZ)
+
+    def test_scan_periods_are_consistent_with_the_bus_speed(self):
         """A scan that cannot finish inside its own period never idles.
 
-        One two-byte port-pair read is about 48 bit times plus framing. At
-        100 kHz that is ~0.5 ms per expander, so three expanders need ~1.5 ms.
+        One two-byte port-pair read is about 48 bit times plus framing. The
+        active period must leave real headroom over every expander a role
+        actually scans, and every part uses the same periods so cross-part
+        timing stays symmetric.
         """
-        bit_time_us = 1_000_000 / 100_000
-        per_expander_us = 48 * bit_time_us
-        scan_ms = (per_expander_us * len(spec.EXPANDER_ADDRESSES)) / 1000
+        per_expander_us = 48 * (1_000_000 / self.bus_hz())
 
-        for path in (LEFT_DTS, RIGHT_DTS):
+        periods = set()
+        for role, path in zip(("left", "right", "numpad"), ROLE_DTS):
             text = read(path)
             active = int(re.search(r"debounce-scan-period-ms\s*=\s*<(\d+)>", text).group(1))
             idle = int(re.search(r"poll-period-ms\s*=\s*<(\d+)>", text).group(1))
+            scan_ms = (per_expander_us * len(spec.SCANNER_EXPANDERS[role])) / 1000
+            periods.add((active, idle))
             with self.subTest(path.name):
-                self.assertGreater(active, scan_ms)
+                self.assertGreaterEqual(active, 2 * scan_ms)
                 self.assertGreaterEqual(idle, active)
+        self.assertEqual(periods, {(spec.ACTIVE_SCAN_MS, spec.IDLE_POLL_MS)})
 
-    def test_scanner_owns_every_declared_expander(self):
-        for path in (LEFT_DTS, RIGHT_DTS):
+    def test_scanner_owns_exactly_the_required_expanders(self):
+        for role, path in zip(("left", "right", "numpad"), ROLE_DTS):
             text = read(path)
             expanders = re.search(r"expanders\s*=\s*(.*?);", text, re.S)
             self.assertIsNotNone(expanders, path.name)
             declared = set(re.findall(r"&(\w+)", expanders.group(1)))
             used = {label for label, _ in key_inputs(path)}
             with self.subTest(path.name):
-                self.assertEqual(declared, set(spec.EXPANDER_ADDRESSES))
+                self.assertEqual(declared, set(spec.SCANNER_EXPANDERS[role]))
                 self.assertTrue(used <= declared)
 
 
 class RoleTest(unittest.TestCase):
-    def test_left_is_central_and_right_is_not(self):
+    def test_left_is_central_and_the_peripherals_are_not(self):
         text = (BOARD / "Kconfig.defconfig").read_text()
         left = re.search(r"if BOARD_NOCFREE_AND_LEFT\n(.*?)\nendif", text, re.S).group(1)
         right = re.search(r"if BOARD_NOCFREE_AND_RIGHT\n(.*?)\nendif", text, re.S).group(1)
+        numpad = re.search(r"if BOARD_NOCFREE_AND_NUMPAD\n(.*?)\nendif", text, re.S).group(1)
         self.assertIn("ZMK_SPLIT_ROLE_CENTRAL", left)
         self.assertNotIn("ZMK_SPLIT_ROLE_CENTRAL", right)
+        self.assertNotIn("ZMK_SPLIT_ROLE_CENTRAL", numpad)
         self.assertIn("config ZMK_SPLIT\n    default y", text)
+
+    def test_the_central_assigns_two_peripheral_slots(self):
+        """ZMK gives ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS its own default before
+        Zephyr sources a board's Kconfig.defconfig, and Kconfig keeps the
+        first default it meets, so a `default 2` there is shadowed and the
+        numpad never gets a slot. Only an assignment in the defconfig works,
+        and Kconfig.defconfig must not carry a default that looks as if it
+        does."""
+        defconfig = (BOARD / "nocfree_and_left_nrf52833_zmk_defconfig").read_text()
+        self.assertIn("CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2", defconfig)
+        kconfig = (BOARD / "Kconfig.defconfig").read_text()
+        self.assertNotRegex(kconfig, r"config ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS\s*\n\s*default")
+
+    def test_keyboard_names_fit_the_bluetooth_device_name(self):
+        """Zephyr's host asserts strlen(name) < BT_DEVICE_NAME_MAX at build
+        time, and ZMK sets that to 16 so the name fits the advertising data.
+        Sixteen characters therefore does not build."""
+        text = (BOARD / "Kconfig.defconfig").read_text()
+        names = re.findall(r"config ZMK_KEYBOARD_NAME\s*\n\s*default \"([^\"]*)\"", text)
+        self.assertEqual(len(names), 3)
+        for name in names:
+            with self.subTest(name):
+                self.assertLess(len(name), 16)
 
     def test_the_defconfigs_never_set_a_split_role(self):
         """Roles live in Kconfig.defconfig only. A defconfig override here
-        would silently make both halves centrals and kill the right half."""
+        would silently make every part a central and kill the peripherals."""
         for name in (
             "nocfree_and_left_nrf52833_zmk_defconfig",
             "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
         ):
             with self.subTest(name):
                 self.assertNotIn("ZMK_SPLIT_ROLE_CENTRAL", (BOARD / name).read_text())
@@ -283,21 +337,25 @@ class RoleTest(unittest.TestCase):
     def test_only_the_central_presents_usb_hid(self):
         left = (BOARD / "nocfree_and_left_nrf52833_zmk_defconfig").read_text()
         right = (BOARD / "nocfree_and_right_nrf52833_zmk_defconfig").read_text()
+        numpad = (BOARD / "nocfree_and_numpad_nrf52833_zmk_defconfig").read_text()
         self.assertIn("CONFIG_ZMK_USB=y", left)
         self.assertNotIn("CONFIG_ZMK_USB=y", right)
+        self.assertNotIn("CONFIG_ZMK_USB=y", numpad)
 
-    def test_both_halves_advertise_bluetooth(self):
+    def test_every_part_advertises_bluetooth(self):
         for name in (
             "nocfree_and_left_nrf52833_zmk_defconfig",
             "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
         ):
             with self.subTest(name):
                 self.assertIn("CONFIG_ZMK_BLE=y", (BOARD / name).read_text())
 
-    def test_both_halves_keep_a_usb_recovery_interface(self):
+    def test_every_part_keeps_a_usb_recovery_interface(self):
         for name in (
             "nocfree_and_left_nrf52833_zmk_defconfig",
             "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
         ):
             text = (BOARD / name).read_text()
             with self.subTest(name):
@@ -310,9 +368,14 @@ class RoleTest(unittest.TestCase):
         lines are the only thing that brings up the right half's recovery
         interface. Losing either strands the peripheral without a
         connection-independent DFU path."""
-        right = (BOARD / "nocfree_and_right_nrf52833_zmk_defconfig").read_text()
-        self.assertIn("CONFIG_USB_DEVICE_STACK=y", right)
-        self.assertIn("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=y", right)
+        for name in (
+            "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
+        ):
+            text = (BOARD / name).read_text()
+            with self.subTest(name):
+                self.assertIn("CONFIG_USB_DEVICE_STACK=y", text)
+                self.assertIn("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=y", text)
 
     def test_split_link_is_tuned_for_link_margin(self):
         """The split link favours reliability over throughput: ZMK's
@@ -324,14 +387,18 @@ class RoleTest(unittest.TestCase):
         link options or the PHY can still be negotiated up."""
         left = (BOARD / "nocfree_and_left_nrf52833_zmk_defconfig").read_text()
         right = (BOARD / "nocfree_and_right_nrf52833_zmk_defconfig").read_text()
-        for name, text in (("left", left), ("right", right)):
+        numpad = (BOARD / "nocfree_and_numpad_nrf52833_zmk_defconfig").read_text()
+        for name, text in (("left", left), ("right", right), ("numpad", numpad)):
             with self.subTest(name):
                 self.assertIn("CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y", text)
                 self.assertIn("CONFIG_BT_BUF_ACL_TX_COUNT=8", text)
                 self.assertIn("CONFIG_BT_L2CAP_TX_BUF_COUNT=8", text)
                 self.assertIn("CONFIG_BT_CONN_TX_MAX=8", text)
         self.assertIn("CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE=16", left)
+        self.assertIn("CONFIG_BT_MAX_CONN=7", left)
+        self.assertIn("CONFIG_BT_MAX_PAIRED=7", left)
         self.assertIn("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32", right)
+        self.assertIn("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32", numpad)
 
     def test_low_frequency_clock_stays_on_the_internal_rc(self):
         """No 32.768 kHz crystal is confirmed fitted. Selecting an absent
@@ -339,6 +406,7 @@ class RoleTest(unittest.TestCase):
         for name in (
             "nocfree_and_left_nrf52833_zmk_defconfig",
             "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
         ):
             text = (BOARD / name).read_text()
             with self.subTest(name):
@@ -346,7 +414,7 @@ class RoleTest(unittest.TestCase):
                 self.assertNotIn("K32SRC_XTAL", text)
 
     def test_unverified_hardware_stays_disabled(self):
-        """No output pin, regulator mode or radio power is asserted anywhere."""
+        """No output pin or regulator mode is asserted anywhere."""
         text = " ".join(read(p) for p in BOARD.glob("*.dts*"))
         for forbidden in (
             "zmk,backlight",
@@ -368,7 +436,6 @@ class RoleTest(unittest.TestCase):
             for forbidden in (
                 "CONFIG_ZMK_BACKLIGHT",
                 "CONFIG_ZMK_RGB_UNDERGLOW",
-                "CONFIG_BT_CTLR_TX_PWR",
             ):
                 with self.subTest(f"{name.name} {forbidden}"):
                     self.assertNotIn(forbidden, config)
@@ -376,6 +443,22 @@ class RoleTest(unittest.TestCase):
             # This one defaults on, so it has to be turned off explicitly.
             with self.subTest(f"{name.name} battery"):
                 self.assertIn("CONFIG_ZMK_BATTERY_REPORTING=n", config)
+
+    def test_every_part_transmits_at_the_radio_maximum(self):
+        """+8 dBm is the one radio setting this port raises, and it has to be
+        set on every part: both directions of the split link only gain margin
+        if the central and the peripherals all transmit at it. Exactly one
+        level may be named, so a stray lower one cannot win the Kconfig
+        choice."""
+        for name in (
+            "nocfree_and_left_nrf52833_zmk_defconfig",
+            "nocfree_and_right_nrf52833_zmk_defconfig",
+            "nocfree_and_numpad_nrf52833_zmk_defconfig",
+        ):
+            text = (BOARD / name).read_text()
+            with self.subTest(name):
+                levels = re.findall(r"^CONFIG_BT_CTLR_TX_PWR_(\w+)=y$", text, re.M)
+                self.assertEqual(levels, ["PLUS_8"])
 
 
 class MetadataTest(unittest.TestCase):
@@ -385,12 +468,12 @@ class MetadataTest(unittest.TestCase):
         self.assertIn("board_root: .", text)
         self.assertIn("dts_root: .", text)
 
-    def test_board_yml_declares_both_halves_with_the_zmk_variant(self):
+    def test_board_yml_declares_every_part_with_the_zmk_variant(self):
         text = (BOARD / "board.yml").read_text()
-        for name in ("nocfree_and_left", "nocfree_and_right"):
+        for name in ("nocfree_and_left", "nocfree_and_right", "nocfree_and_numpad"):
             self.assertIn(f"name: {name}", text)
-        self.assertEqual(text.count("name: nrf52833"), 2)
-        self.assertEqual(text.count("name: zmk"), 2)
+        self.assertEqual(text.count("name: nrf52833"), 3)
+        self.assertEqual(text.count("name: zmk"), 3)
 
     def test_hardware_metadata_has_the_required_fields(self):
         text = (BOARD / "nocfree_and.zmk.yml").read_text()
@@ -399,12 +482,14 @@ class MetadataTest(unittest.TestCase):
                 self.assertIn(required, text)
         self.assertIn("nocfree_and_left//zmk", text)
         self.assertIn("nocfree_and_right//zmk", text)
+        self.assertIn("nocfree_and_numpad//zmk", text)
         self.assertIn("- keys", text)
 
-    def test_build_matrix_covers_both_roles(self):
+    def test_build_matrix_covers_every_role(self):
         text = (ROOT / "build.yaml").read_text()
         self.assertIn("nocfree_and_left/nrf52833/zmk", text)
         self.assertIn("nocfree_and_right/nrf52833/zmk", text)
+        self.assertIn("nocfree_and_numpad/nrf52833/zmk", text)
 
     def test_dependencies_are_public_and_pinned(self):
         text = (ROOT / "config/west.yml").read_text()

@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2026 The NocFree ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "nocfree_and.dtsi"
+
+/ {
+    /*
+     * Key positions, in KSCAN column order. The list index is the column, so
+     * unpopulated expander bits are excluded simply by being absent -- there is
+     * no separate "ignore" table to keep in sync.
+     *
+     * This part owns global keymap positions 84-104. Its 21 local columns are
+     * shifted into that range by the col-offset below, so the positions it
+     * sends to the central are already global.
+     *
+     * The 21 populated inputs use the input order from the separately audited
+     * and physically accepted numpad firmware: pca20 pins 0-14, followed by
+     * pca22 pins 0-5. A USB diagnostic boot on the physical unit verified both
+     * devices and found no response at the otherwise shared pca24 address, so
+     * the numpad scanner must not make that unused address a startup dependency.
+     *
+     * Timing budget at 400 kHz: one two-byte port-pair read costs roughly
+     * 120 us on the wire, so a two-expander scan costs roughly 0.3 ms with
+     * driver overhead. The 2 ms active period leaves most of each period idle
+     * while a key is held, and ZMK's debouncer integrates real time, so a
+     * 5 ms press latches 6 ms after it is first seen -- a 1 ms period would
+     * save 1 ms of that for twice the bus duty. The 5 ms idle poll bounds how
+     * long a press can go unnoticed. At 100 kHz a scan takes about 1.5 ms and
+     * the periods must widen to 3 ms active / 10 ms idle.
+     */
+    kscan0: kscan {
+        compatible = "nocfree,kscan-pca9555";
+        status = "okay";
+
+        expanders = <&pca20>, <&pca22>;
+
+        poll-period-ms = <5>;
+        debounce-scan-period-ms = <2>;
+        debounce-press-ms = <5>;
+        debounce-release-ms = <5>;
+
+        key-inputs =
+            /* Num Lock, F3, F4, F7: columns 0-3 */
+            <&pca20 0>, <&pca20 1>, <&pca20 2>, <&pca20 3>,
+            /* Clear, divide, multiply, minus: columns 4-7 */
+            <&pca20 4>, <&pca20 5>, <&pca20 6>, <&pca20 7>,
+            /* 7, 8, 9, plus: columns 8-11 */
+            <&pca20 8>, <&pca20 9>, <&pca20 10>, <&pca20 11>,
+            /* 4, 5, 6: columns 12-14 */
+            <&pca20 12>, <&pca20 13>, <&pca20 14>,
+            /* 1, 2, 3, Enter: columns 15-18 */
+            <&pca22 0>, <&pca22 1>, <&pca22 2>, <&pca22 3>,
+            /* 0, decimal: columns 19-20 */
+            <&pca22 4>, <&pca22 5>;
+    };
+};
+
+&ansi_layout {
+    kscan = <&kscan0>;
+};
+
+&matrix_transform0 {
+    col-offset = <84>;
+};

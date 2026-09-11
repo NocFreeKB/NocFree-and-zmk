@@ -23,11 +23,11 @@ LOG_MODULE_REGISTER(nocfree_kscan_pca9555, CONFIG_ZMK_LOG_LEVEL);
 
 /*
  * One scan blocks on I2C for as long as it takes to read every expander --
- * roughly 1.5 ms for three parts at 100 kHz. The system work queue is
- * cooperative and is also where ZMK turns key events into HID reports and split
- * notifications, so scanning there would put every scan's bus transfer directly
- * in front of the events it has just produced. Use a dedicated preemptible
- * queue instead.
+ * roughly 0.5 ms for three parts at 400 kHz, 1.5 ms at 100 kHz. The system
+ * work queue is cooperative and is also where ZMK turns key events into HID
+ * reports and split notifications, so scanning there would put every scan's
+ * bus transfer directly in front of the events it has just produced. Use a
+ * dedicated preemptible queue instead.
  */
 K_THREAD_STACK_DEFINE(kscan_pca9555_stack, CONFIG_NOCFREE_KSCAN_PCA9555_STACK_SIZE);
 static struct k_work_q kscan_pca9555_work_q;

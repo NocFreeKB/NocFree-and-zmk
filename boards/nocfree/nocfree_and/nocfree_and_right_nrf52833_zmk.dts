@@ -16,10 +16,14 @@
      * columns are shifted into that range by the col-offset below, so the
      * positions it sends to the central are already global.
      *
-     * Timing budget at 100 kHz: one two-byte port-pair read costs roughly
-     * 480 us, so a three-expander scan costs roughly 1.5 ms. The active period
-     * must exceed that, hence 3 ms rather than ZMK's 1 ms default. Raising the
-     * bus to 400 kHz would bring a scan to about 0.4 ms and allow 1 ms.
+     * Timing budget at 400 kHz: one two-byte port-pair read costs roughly
+     * 120 us on the wire, so a three-expander scan costs roughly 0.5 ms with
+     * driver overhead. The 2 ms active period leaves most of each period idle
+     * while a key is held, and ZMK's debouncer integrates real time, so a
+     * 5 ms press latches 6 ms after it is first seen -- a 1 ms period would
+     * save 1 ms of that for twice the bus duty. The 5 ms idle poll bounds how
+     * long a press can go unnoticed. At 100 kHz a scan takes about 1.5 ms and
+     * the periods must widen to 3 ms active / 10 ms idle.
      */
     kscan0: kscan {
         compatible = "nocfree,kscan-pca9555";
@@ -27,8 +31,8 @@
 
         expanders = <&pca20>, <&pca22>, <&pca24>;
 
-        poll-period-ms = <10>;
-        debounce-scan-period-ms = <3>;
+        poll-period-ms = <5>;
+        debounce-scan-period-ms = <2>;
         debounce-press-ms = <5>;
         debounce-release-ms = <5>;
 

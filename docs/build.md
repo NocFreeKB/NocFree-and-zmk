@@ -2,16 +2,17 @@
 
 # Building
 
-Two images are produced, one per half:
+Three images are produced, one per part:
 
 | Board target | Artifact |
 |---|---|
 | `nocfree_and_left/nrf52833/zmk` | left / split central |
 | `nocfree_and_right/nrf52833/zmk` | right / split peripheral |
+| `nocfree_and_numpad/nrf52833/zmk` | numpad / split peripheral |
 
 Every dependency is public and pinned in [`config/west.yml`](../config/west.yml)
 to an exact ZMK commit, which in turn pins Zephyr. A clean checkout of this
-repository is sufficient to reproduce both images.
+repository is sufficient to reproduce all three images.
 
 ## GitHub Actions
 
@@ -20,7 +21,7 @@ repository is sufficient to reproduce both images.
 same ZMK commit as `config/west.yml` — and separately rebuilds both halves in
 the ZMK build container to run the artifact checks (flash bounds, roles,
 linkage) against the images. Fork or clone this repository, push, and collect
-the two `.uf2` files from the run artifacts.
+the three `.uf2` files from the run artifacts.
 
 ## Locally, with Docker
 
@@ -37,6 +38,7 @@ Artifacts land at:
 ```
 <workspace>/build/left/zephyr/zmk.uf2
 <workspace>/build/right/zephyr/zmk.uf2
+<workspace>/build/numpad/zephyr/zmk.uf2
 ```
 
 ## Locally, with an existing ZMK setup
@@ -52,6 +54,8 @@ west zephyr-export
 west build -p -s zmk/app -d build/left  -b nocfree_and_left/nrf52833/zmk  \
     -- -DZMK_CONFIG=$PWD/config -DZMK_EXTRA_MODULES=/path/to/this/repo
 west build -p -s zmk/app -d build/right -b nocfree_and_right/nrf52833/zmk \
+    -- -DZMK_CONFIG=$PWD/config -DZMK_EXTRA_MODULES=/path/to/this/repo
+west build -p -s zmk/app -d build/numpad -b nocfree_and_numpad/nrf52833/zmk \
     -- -DZMK_CONFIG=$PWD/config -DZMK_EXTRA_MODULES=/path/to/this/repo
 ```
 

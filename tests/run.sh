@@ -3,8 +3,8 @@
 #
 # Run every automated check. No toolchain or hardware required.
 #
-# Set NOCFREE_BUILD_DIR to a directory containing left/ and right/ build trees
-# to additionally check the built artifacts.
+# Set NOCFREE_BUILD_DIR to a directory containing left/, right/ and numpad/
+# build trees to additionally check the built artifacts.
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ trap 'rm -rf "${OUT}"' EXIT
 # does not hold both build trees, so the artifact checks can never be skipped
 # silently by a mistyped path.
 if [ -n "${NOCFREE_BUILD_DIR:-}" ]; then
-    for role in left right; do
+    for role in left right numpad; do
         if [ ! -f "${NOCFREE_BUILD_DIR}/${role}/zephyr/.config" ]; then
             echo "NOCFREE_BUILD_DIR=${NOCFREE_BUILD_DIR} has no ${role}/zephyr/.config" >&2
             exit 1
