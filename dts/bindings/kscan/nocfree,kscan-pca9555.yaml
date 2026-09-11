@@ -10,8 +10,8 @@ description: |
   per key.
 
   The scanner owns the expander configuration and polarity-inversion registers
-  and verifies them at init, so a warm MCU reset cannot leave stale hardware
-  inversion in place. See docs/architecture.md.
+  and verifies them before accepting input, retrying after errors, so a warm
+  MCU reset cannot leave stale hardware inversion in place. See docs/architecture.md.
 
 compatible: "nocfree,kscan-pca9555"
 

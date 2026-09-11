@@ -64,7 +64,7 @@ class LicensingTest(unittest.TestCase):
 
     def test_no_copyright_claims_conflict_with_the_repository_licence(self):
         for path in candidate_files():
-            if path.suffix not in {".c", ".h"}:
+            if path.suffix not in {".c", ".h", ".inc"}:
                 continue
             text = path.read_text()
             with self.subTest(str(path.relative_to(ROOT))):
@@ -118,7 +118,7 @@ class NoPrivateDataTest(unittest.TestCase):
 
 
 class FormattingTest(unittest.TestCase):
-    TEXT_SUFFIXES = {".c", ".h", ".dts", ".dtsi", ".keymap", ".yaml", ".yml", ".py",
+    TEXT_SUFFIXES = {".c", ".h", ".inc", ".dts", ".dtsi", ".keymap", ".yaml", ".yml", ".py",
                      ".sh", ".md", ".cmake", ".txt", ".conf"}
 
     # README.md is NocFree's published porting guide. This contribution does not

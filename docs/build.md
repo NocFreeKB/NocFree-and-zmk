@@ -14,11 +14,23 @@ Every dependency is public and pinned in [`config/west.yml`](../config/west.yml)
 to an exact ZMK commit, which in turn pins Zephyr. A clean checkout of this
 repository is sufficient to reproduce all three images.
 
+## Reliability patch
+
+The module automatically applies `patches/zmk-reliability.patch` to copies in
+`<build>/nocfree-patched/`. The west checkout stays unchanged. SHA-256 checks
+reject any unreviewed upstream source, and CMake fails if a required replacement
+is not compiled. Both the standard workflow and local builds use this hook.
+
+`inputs.json` beside the patched sources records firmware input hashes. Artifact
+tests reject a build whose inputs differ from the current module. Use a pristine
+build when changing the upstream pin, and update the patch and fault tests as
+one change. Python 3 and Git are required; both ship in the build container.
+
 ## GitHub Actions
 
 `.github/workflows/build.yml` runs the repository tests, then ZMK's standard
 `build-user-config` workflow over [`build.yaml`](../build.yaml) — pinned to the
-same ZMK commit as `config/west.yml` — and separately rebuilds both halves in
+same ZMK commit as `config/west.yml` — and separately rebuilds all three parts in
 the ZMK build container to run the artifact checks (flash bounds, roles,
 linkage) against the images. Fork or clone this repository, push, and collect
 the three `.uf2` files from the run artifacts.

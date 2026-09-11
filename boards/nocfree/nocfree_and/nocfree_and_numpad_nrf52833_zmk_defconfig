@@ -52,16 +52,14 @@ CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT=y
 # rationale. Set on every part so none can negotiate 2M.
 CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y
 
-# Deeper BLE TX pipeline. Same gap as the right half: the split peripheral
-# dequeues a complete key-state bitmap before calling bt_gatt_notify(), and
-# if submission fails that state is dropped with only a debug log.
+# Deeper controller buffers absorb short fades; the reliability module also
+# retains failed submissions and periodically repairs the current key state.
 CONFIG_BT_BUF_ACL_TX_COUNT=8
 CONFIG_BT_L2CAP_TX_BUF_COUNT=8
 CONFIG_BT_CONN_TX_MAX=8
 
-# Queue of complete 16-byte key-state bitmaps awaiting transmission to the
-# central. Overflow discards the oldest entry, so the newest state always
-# survives. 32 entries x 16 B = 512 B of RAM.
+# Complete key-state snapshots awaiting transmission. The reliability module
+# preserves order on retry and collapses overload to the latest complete state.
 CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32
 
 # Transmit at the radio's maximum, +8 dBm, instead of the 0 dBm default; see
@@ -69,3 +67,9 @@ CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32
 # it applies to the link back to the central. Both directions of the split
 # link gain margin only when every part sets it.
 CONFIG_BT_CTLR_TX_PWR_PLUS_8=y
+
+# Absorb a complete local key burst without dropping releases.
+CONFIG_ZMK_KSCAN_EVENT_QUEUE_SIZE=64
+
+# Leave stack margin for state repair and transport callbacks.
+CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE=1024

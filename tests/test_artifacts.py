@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Inspect built firmware. Skipped unless a build directory is available.
+"""Inspect built firmware. Skipped unless a build directory is explicitly selected.
 
 Point NOCFREE_BUILD_DIR at a directory containing `left/`, `right/` and
-`numpad/` build trees, or accept the default used by scripts/build-local.sh.
+`numpad/` build trees. Existing older builds are never selected implicitly.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import runpy
 import os
 import re
 import struct
@@ -42,7 +45,7 @@ def dt_int(text: str, prop: str) -> int:
 
 
 def available() -> bool:
-    return all(
+    return bool(os.environ.get("NOCFREE_BUILD_DIR")) and all(
         (role_dir(role) / ".config").is_file() and (role_dir(role) / "zmk.uf2").is_file()
         for role in ("left", "right", "numpad")
     )
@@ -80,6 +83,40 @@ def uf2_blocks(path: Path):
 @unittest.skipUnless(available(), f"no build output under {BUILD}")
 class ArtifactTest(unittest.TestCase):
     ROLES = ("left", "right", "numpad")
+
+    def test_images_use_current_sources_and_reliability_code(self):
+        helpers = runpy.run_path(str(ROOT / "scripts/prepare-zmk.py"))
+        expected = helpers["module_inputs"](ROOT)
+        for role in self.ROLES:
+            patched = BUILD / role / "nocfree-patched"
+            evidence = json.loads((patched / "inputs.json").read_text())
+            self.assertEqual(evidence["module_inputs"], expected, f"stale {role} build")
+            for name, digest in evidence["patched_sources"].items():
+                self.assertEqual(hashlib.sha256((patched / name).read_bytes()).hexdigest(), digest)
+            for artifact in ("zmk.elf", "zmk.uf2", "zmk.map"):
+                self.assertGreaterEqual((role_dir(role) / artifact).stat().st_mtime_ns,
+                                        (patched / "inputs.json").stat().st_mtime_ns,
+                                        f"{role} was configured but not successfully rebuilt")
+            mapfile = (role_dir(role) / "zmk.map").read_text()
+            names = ["physical_layouts.c"]
+            names += (["ble.c", "hog.c", "keymap.c", "usb_hid.c", "split/bluetooth/central.c"]
+                      if role == "left" else
+                      ["split/bluetooth/service.c", "split/bluetooth/peripheral.c"])
+            ninja = (BUILD / role / "build.ninja").read_text()
+            for name in names:
+                self.assertTrue("nocfree-patched/" + name + ".obj" in ninja,
+                                f"{role}: {name} was not compiled from the patched source")
+                self.assertTrue(Path(name).name + ".obj" in mapfile,
+                                f"{role}: {name} is absent from the link map")
+            self.assertEqual(kconfig(role).get("CONFIG_ZMK_KSCAN_EVENT_QUEUE_SIZE"), "64")
+        left = kconfig("left")
+        self.assertEqual(left.get("CONFIG_ZMK_BLE_THREAD_STACK_SIZE"), "2048")
+        for role in ("right", "numpad"):
+            self.assertEqual(kconfig(role).get("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE"),
+                             "1024")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_INT"), "6")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_LATENCY"), "0")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_TIMEOUT"), "100")
 
     def test_scanner_is_compiled_in(self):
         for role in self.ROLES:

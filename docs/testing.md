@@ -23,8 +23,18 @@ split roles, clock source, and module metadata.
 formatting, and the absence of private paths, identifiers, binaries or build
 output.
 
-**`tests/test_artifacts.py`** — built images, when a build directory is present:
-board role, scanner inclusion, and that every flashed byte lands inside the code
+**`tests/test_runtime.py`** — compiles the production queue and transport code
+with controlled clocks and failing transport calls. Covers retry ordering,
+final-release repair, queue overflow, in-flight replacement, expiry, profile
+isolation, USB busy/suspend, scanner boot/read failures, and modifier/Fn skew.
+With a build directory it also compiles the patched central receive/scanning
+functions to test malformed packets, bulk releases and scanning restart.
+The scanner fault harness uses an immediate debouncer; it does not establish
+physical switch bounce characteristics or emulate the Bluetooth controller.
+
+**`tests/test_artifacts.py`** — built images, when explicitly selected:
+current input hashes, compiled reliability code, board role, scanner inclusion,
+and that every flashed byte lands inside the code
 partition. CI runs these against a fresh container build; locally they need
 `NOCFREE_BUILD_DIR` (below), and `run.sh` fails rather than skipping if that
 variable points at something that is not a build tree.
@@ -41,6 +51,9 @@ NOCFREE_BUILD_DIR=../nocfree-and-zmk-build/build ./tests/run.sh
 ```
 
 ## Physical
+
+Run the [reliability acceptance batches](reliability.md#physical-acceptance)
+on these exact images in addition to the baseline checks below.
 
 Automated tests cannot establish that a key is wired where the devicetree says
 it is. Before trusting a build on real hardware, work through at least:

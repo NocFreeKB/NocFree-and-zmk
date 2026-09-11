@@ -57,20 +57,14 @@ CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT=y
 # loudly it talks.
 CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y
 
-# When the link fades, un-acknowledged packets pile up inside the Bluetooth
-# stack. With the default three TX buffers that pile-up immediately makes
-# notification submission fail, and ZMK's split code drops the key state it
-# was about to send (the state is dequeued before bt_gatt_notify() and a
-# failure is only logged). More buffers keep submissions succeeding across a
-# longer fade, for a few hundred bytes of RAM.
+# Deeper controller buffers absorb short fades; the reliability module also
+# retains failed submissions and periodically repairs the current key state.
 CONFIG_BT_BUF_ACL_TX_COUNT=8
 CONFIG_BT_L2CAP_TX_BUF_COUNT=8
 CONFIG_BT_CONN_TX_MAX=8
 
-# Queue of per-position events received from the peripherals. This is also
-# the queue that absorbs the release-everything burst raised when a
-# peripheral disconnects; the default of 5 silently drops releases beyond it
-# if more keys are held at that moment.
+# Retained for non-position upstream events. Position updates now use complete
+# snapshot queues, including disconnect releases; see docs/reliability.md.
 CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE=16
 
 # Two split peripherals: the right half and the numpad. This has to be an
@@ -93,3 +87,17 @@ CONFIG_BT_MAX_PAIRED=7
 # the added current draw nor the field strength has been measured on this
 # hardware. See docs/architecture.md.
 CONFIG_BT_CTLR_TX_PWR_PLUS_8=y
+
+# Absorb a complete local key burst without dropping releases.
+CONFIG_ZMK_KSCAN_EVENT_QUEUE_SIZE=64
+
+# 7.5 ms split interval, no skipped intervals, 1 second link-loss detection.
+# More radio wakeups trade battery life for dependable shortcut timing.
+CONFIG_ZMK_SPLIT_BLE_PREF_INT=6
+CONFIG_ZMK_SPLIT_BLE_PREF_LATENCY=0
+CONFIG_ZMK_SPLIT_BLE_PREF_TIMEOUT=100
+CONFIG_ZMK_BLE_KEYBOARD_REPORT_QUEUE_SIZE=32
+CONFIG_ZMK_BLE_CONSUMER_REPORT_QUEUE_SIZE=16
+
+# Leave stack margin for state repair and transport callbacks.
+CONFIG_ZMK_BLE_THREAD_STACK_SIZE=2048

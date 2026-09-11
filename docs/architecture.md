@@ -77,24 +77,24 @@ survive a warm MCU reset while the expanders stay powered. Firmware that leaves
 them inverting — which NocFree documents the factory firmware as doing — would
 combine with active-low inputs to make every released key read as pressed.
 
-Both problems live in the exact code path a generic solution would depend on.
-Rather than carry downstream patches against Zephyr, which a normal ZMK user
-building through GitHub Actions cannot apply, this module drives the three
-expanders over I2C directly. **This contribution patches neither ZMK nor
-Zephyr.**
+Both problems live in the generic GPIO path. This module instead reads the
+expanders directly over I2C. Zephyr is unchanged. The reliability extension
+patches verified copies of selected ZMK sources at build time; see
+[reliability.md](reliability.md).
 
 The scanner (`drivers/kscan/kscan_pca9555.c`, `nocfree,kscan-pca9555`):
 
-- writes `0x00 0x00` to the polarity registers and `0xFF 0xFF` to the
-  configuration registers at init, then **reads both back and fails
-  initialisation if either does not match**;
-- refuses to report anything unless that verification passed, so a scanner that
-  cannot vouch for its input stays silent rather than emitting stuck keys;
-- reads each expander once per scan with a two-byte port-pair read, so a scan
-  costs one I2C transaction per expander regardless of key count;
-- reports through ZMK's normal KSCAN interface, so it composes with
-  `zmk,matrix-transform`, `zmk,physical-layout` and BLE split with no other
-  changes.
+- writes zero to the polarity registers and all ones to the configuration
+  registers, then reads both back before accepting any input;
+- retries verification on its scan queue, including after an unavailable
+  expander at boot, without requiring a power cycle;
+- reads all populated expanders before updating any debouncer, so a partial
+  scan cannot produce a mixture of current and stale key events;
+- resets debounce progress on errors, holds existing keys across short faults,
+  and releases them when an outage reaches 100 ms; recovery rechecks registers
+  and resumes normal debouncing;
+- reports through ZMK's KSCAN interface, with backpressure on the dedicated
+  scan thread instead of dropping an event when the receiving queue is full.
 
 ### Polling, not expander interrupts
 
@@ -159,7 +159,8 @@ its factory firmware.
 
 A bus that does not hold up at 400 kHz fails in one of two visible ways. A
 transfer that is not acknowledged or times out is a read error, which the
-scanner holds the previous key state across, retries with backoff and logs. A
+scanner logs and retries. It releases stale keys after a sustained outage
+(100 ms threshold), then rechecks configuration before accepting input. A
 corrupted bit that is acknowledged is chatter on one key, which the 5 ms
 debounce suppresses unless it persists. If either is seen, set
 `I2C_BITRATE_STANDARD` in `nocfree_and.dtsi` and widen the scan periods to

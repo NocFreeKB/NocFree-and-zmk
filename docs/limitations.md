@@ -24,10 +24,9 @@ is left alone rather than configured with a guess.
 
 ## Known rough edges
 
-- **Application slot headroom.** The left image currently fills about 91% of
-  the 248 KiB code partition and the right about 75%. The numpad image is
-  expected to match the right. That is enough for keymap changes, not for a
-  large feature. The application region has 280 KiB in total,
+- **Application slot headroom.** The left image fills about 93% of
+  the 248 KiB code partition; the right and numpad fill about 76%. That is enough
+  for keymap changes, not for a large feature. The application region has 280 KiB in total,
   so the code/settings split could be moved — but doing so relocates the
   settings partition and discards saved pairings, so it should be decided before
   people start using this firmware rather than after.
@@ -44,27 +43,34 @@ is left alone rather than configured with a guess.
   a stale numpad pairing on the left half, the user confirmed normal typing
   and subsequently confirmed that all keys work (2026-09-13). This hardware
   observation is for the combined images, rather than this feature alone.
-- **Split reliability.** This port uses ZMK's stock split protocol with no
-  code additions, tuned for link margin: every part stays on the more
-  sensitive 1M PHY (`CONFIG_ZMK_BLE_EXPERIMENTAL_CONN`) and carries a deeper
-  BLE TX pipeline and deeper state queues, because the stock peripheral
-  drops a key-state notification the stack refuses to accept. Across a long
-  enough fade that drop can still happen — there is no periodic full-state
-  repair — so a dropped final notification is corrected by the next key
-  event from that half, or by the release-everything cleanup on disconnect,
-  rather than immediately. Every part now transmits at the radio's +8 dBm
-  maximum (see architecture.md); closing the drop itself is upstream work.
-- **Split latency.** The two halves poll on independent schedules, so
-  cross-half event ordering can be off by up to one idle poll period plus the
-  BLE connection interval. No latency figure is claimed.
+- **Wireless outages.** Retries and periodic full-state reports repair dropped
+  releases. Queues preserve short bursts, but overload or 250 ms of backlog
+  collapses to the latest state. Typing during sustained interference can be
+  lost; obsolete shortcuts are not replayed after recovery.
+- **Shortcut timing.** Ordinary key events wait 15 ms so a slightly late
+  modifier/Fn press from another part can take effect. This adds latency and
+  can combine a letter with a modifier physically pressed just after it.
+  Greater radio delays remain outside that window. No measured latency claim.
+- **Power.** Zero split peripheral latency and 100 ms repair reports increase
+  radio activity. Battery life and current draw remain unmeasured.
+- **Rollover and endpoint changes.** The existing HID descriptor supports six
+  ordinary keys at once plus modifiers. Changing outputs or reconnecting a
+  host clears its HID state; release and press held keys again. Bond records
+  deliberately remain intact; missing or incompatible host bonds can still
+  require manual pairing repair.
+
+See [reliability.md](reliability.md) for the implementation, automated evidence,
+and physical acceptance procedure.
 
 ## Hardware status
 
 Observed on one ANSI unit, on macOS.
 
-The current sources — +8 dBm transmit power, the 400 kHz bus and the 2 ms /
-5 ms scan periods — have not been observed on hardware yet. Everything below
-was recorded against earlier images.
+The combined numpad and reliability images at `317266d` were installed on
+all three parts and verified by readback on 2026-09-11. USB enumeration and
+bootloader recovery passed. The user confirmed all keys work on 2026-09-13.
+A stale numpad pairing was repaired separately without clearing the other
+pairings. The observations below predate these combined images.
 
 With the split-link images (the `feat: harden the split link at desk
 distances` commit; both halves' images read back from the bootloader after

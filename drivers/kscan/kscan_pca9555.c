@@ -76,6 +76,7 @@ struct kscan_pca9555_data {
     int64_t last_scan_time;
     /** Consecutive failed scans, for retry backoff and log rate limiting. */
     uint8_t fail_streak;
+    int64_t failure_started;
     /** True between enable_callback and disable_callback. */
     bool enabled;
     /** Set once every expander has been configured and read back correctly. */
@@ -178,41 +179,35 @@ static int kscan_pca9555_read(const struct device *dev) {
     const struct kscan_pca9555_config *config = dev->config;
     struct kscan_pca9555_data *data = dev->data;
     bool continue_scan = false;
+    int err = 0;
 
     if (!data->enabled) {
         return 0;
     }
 
+    if (!data->ready) {
+        for (uint8_t i = 0; i < config->expander_count; i++) {
+            err = kscan_pca9555_configure_expander(&config->expanders[i]);
+            if (err) {
+                goto failed;
+            }
+        }
+        data->ready = true;
+    }
+
     for (uint8_t i = 0; i < config->expander_count; i++) {
-        int err = kscan_pca9555_read_pair(&config->expanders[i],
-                                          NOCFREE_PCA9555_REG_INPUT_PORT0, &data->port_words[i]);
-
+        err = kscan_pca9555_read_pair(&config->expanders[i],
+                                     NOCFREE_PCA9555_REG_INPUT_PORT0, &data->port_words[i]);
         if (err) {
-            /*
-             * Never let a failed or partial transfer reach the debouncer. Hold
-             * the previous key state and retry, backing off so a dead bus is
-             * probed about once a second instead of at full scan rate, and log
-             * only the edges of the outage so the log stays usable.
-             */
-            if (data->fail_streak == 0) {
-                LOG_ERR("0x%02x: input read failed: %d; retrying with backoff",
-                        config->expanders[i].addr, err);
-            }
-            if (data->fail_streak < UINT8_MAX) {
-                data->fail_streak++;
-            }
-
-            const uint32_t backoff = MIN(
-                (uint32_t)config->poll_period_ms << MIN(data->fail_streak, 7), 1000U);
-
-            kscan_pca9555_reschedule(dev, (uint16_t)backoff);
-            return err;
+            goto failed;
         }
     }
 
     if (data->fail_streak != 0) {
         LOG_WRN("input reads recovered after %u failed scans", data->fail_streak);
         data->fail_streak = 0;
+        /* Unobserved outage time is not evidence that a switch was stable. */
+        data->last_scan_time = k_uptime_get();
     }
 
     const int64_t scan_start = k_uptime_get();
@@ -248,6 +243,29 @@ static int kscan_pca9555_read(const struct device *dev) {
     kscan_pca9555_reschedule(dev, continue_scan ? config->debounce_scan_period_ms
                                                 : config->poll_period_ms);
     return 0;
+
+failed:
+    if (!data->fail_streak) {
+        data->failure_started = k_uptime_get();
+        LOG_ERR("Scanner unavailable (%d); retrying", err);
+    }
+    if (data->fail_streak < UINT8_MAX) {
+        data->fail_streak++;
+    }
+    data->ready = false;
+    bool expired = k_uptime_get() - data->failure_started >= 100;
+    for (uint16_t column = 0; column < config->key_count; column++) {
+        struct zmk_debounce_state *state = &data->debounce_state[column];
+        state->counter = 0;
+        state->changed = false;
+        if (expired && state->pressed) {
+            state->pressed = false;
+            data->callback(dev, 0, column, false);
+        }
+    }
+    /* Keep short glitches invisible, but bound how long stale keys stay held. */
+    kscan_pca9555_reschedule(dev, expired ? 100 : 20);
+    return err;
 }
 
 static void kscan_pca9555_work_handler(struct k_work *work) {
@@ -271,15 +289,6 @@ static int kscan_pca9555_configure(const struct device *dev, kscan_callback_t ca
 
 static int kscan_pca9555_enable_callback(const struct device *dev) {
     struct kscan_pca9555_data *data = dev->data;
-
-    /*
-     * Fail closed. If any expander could not be configured and verified, the
-     * scanner stays silent rather than reporting input it cannot interpret.
-     */
-    if (!data->ready) {
-        LOG_ERR("Refusing to scan: expander configuration was not verified");
-        return -EIO;
-    }
 
     if (!data->callback) {
         LOG_ERR("Enabled before a callback was configured");
@@ -326,10 +335,6 @@ static int kscan_pca9555_init(const struct device *dev) {
             return -ENODEV;
         }
 
-        int err = kscan_pca9555_configure_expander(&config->expanders[i]);
-        if (err) {
-            return err;
-        }
     }
 
     /* Resolve each declared key to the expander that owns it. */
@@ -351,7 +356,8 @@ static int kscan_pca9555_init(const struct device *dev) {
         data->key_expander[column] = index;
     }
 
-    data->ready = true;
+    /* Hardware verification runs on the scan queue and can recover after boot. */
+    data->ready = false;
     return 0;
 }
 
