@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Inspect built firmware. Skipped unless a build directory is available.
+"""Inspect built firmware. Skipped unless a build directory is explicitly selected.
 
-Point NOCFREE_BUILD_DIR at a directory containing `left/` and `right/` build
-trees, or accept the default used by scripts/build-local.sh.
+Point NOCFREE_BUILD_DIR at a directory containing `left/`, `right/` and
+`numpad/` build trees. Existing older builds are never selected implicitly.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import runpy
 import os
 import re
 import struct
@@ -34,8 +37,18 @@ def role_dir(role: str) -> Path:
     return BUILD / role / "zephyr"
 
 
+def dt_int(text: str, prop: str) -> int:
+    """The integer value of `prop = < ... >;` within compiled devicetree text."""
+    match = re.search(rf"{re.escape(prop)} = <\s*(0x[0-9a-f]+|\d+)\s*>", text)
+    assert match, f"no {prop}"
+    return int(match.group(1), 0)
+
+
 def available() -> bool:
-    return all((role_dir(role) / ".config").is_file() for role in ("left", "right"))
+    return bool(os.environ.get("NOCFREE_BUILD_DIR")) and all(
+        (role_dir(role) / ".config").is_file() and (role_dir(role) / "zmk.uf2").is_file()
+        for role in ("left", "right", "numpad")
+    )
 
 
 def kconfig(role: str) -> dict[str, str]:
@@ -69,7 +82,41 @@ def uf2_blocks(path: Path):
 
 @unittest.skipUnless(available(), f"no build output under {BUILD}")
 class ArtifactTest(unittest.TestCase):
-    ROLES = ("left", "right")
+    ROLES = ("left", "right", "numpad")
+
+    def test_images_use_current_sources_and_reliability_code(self):
+        helpers = runpy.run_path(str(ROOT / "scripts/prepare-zmk.py"))
+        expected = helpers["module_inputs"](ROOT)
+        for role in self.ROLES:
+            patched = BUILD / role / "nocfree-patched"
+            evidence = json.loads((patched / "inputs.json").read_text())
+            self.assertEqual(evidence["module_inputs"], expected, f"stale {role} build")
+            for name, digest in evidence["patched_sources"].items():
+                self.assertEqual(hashlib.sha256((patched / name).read_bytes()).hexdigest(), digest)
+            for artifact in ("zmk.elf", "zmk.uf2", "zmk.map"):
+                self.assertGreaterEqual((role_dir(role) / artifact).stat().st_mtime_ns,
+                                        (patched / "inputs.json").stat().st_mtime_ns,
+                                        f"{role} was configured but not successfully rebuilt")
+            mapfile = (role_dir(role) / "zmk.map").read_text()
+            names = ["physical_layouts.c"]
+            names += (["ble.c", "hog.c", "keymap.c", "usb_hid.c", "split/bluetooth/central.c"]
+                      if role == "left" else
+                      ["split/bluetooth/service.c", "split/bluetooth/peripheral.c"])
+            ninja = (BUILD / role / "build.ninja").read_text()
+            for name in names:
+                self.assertTrue("nocfree-patched/" + name + ".obj" in ninja,
+                                f"{role}: {name} was not compiled from the patched source")
+                self.assertTrue(Path(name).name + ".obj" in mapfile,
+                                f"{role}: {name} is absent from the link map")
+            self.assertEqual(kconfig(role).get("CONFIG_ZMK_KSCAN_EVENT_QUEUE_SIZE"), "64")
+        left = kconfig("left")
+        self.assertEqual(left.get("CONFIG_ZMK_BLE_THREAD_STACK_SIZE"), "2048")
+        for role in ("right", "numpad"):
+            self.assertEqual(kconfig(role).get("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE"),
+                             "1024")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_INT"), "6")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_LATENCY"), "0")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_PREF_TIMEOUT"), "100")
 
     def test_scanner_is_compiled_in(self):
         for role in self.ROLES:
@@ -80,17 +127,21 @@ class ArtifactTest(unittest.TestCase):
                 self.assertEqual(config.get("CONFIG_I2C"), "y")
 
     def test_split_roles_are_correct(self):
-        left, right = kconfig("left"), kconfig("right")
+        left, right, numpad = kconfig("left"), kconfig("right"), kconfig("numpad")
         self.assertEqual(left.get("CONFIG_ZMK_SPLIT"), "y")
         self.assertEqual(right.get("CONFIG_ZMK_SPLIT"), "y")
+        self.assertEqual(numpad.get("CONFIG_ZMK_SPLIT"), "y")
         self.assertEqual(left.get("CONFIG_ZMK_SPLIT_ROLE_CENTRAL"), "y")
         self.assertNotEqual(right.get("CONFIG_ZMK_SPLIT_ROLE_CENTRAL"), "y")
+        self.assertNotEqual(numpad.get("CONFIG_ZMK_SPLIT_ROLE_CENTRAL"), "y")
+        self.assertEqual(left.get("CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS"), "2")
 
     def test_only_the_central_has_usb_hid(self):
         self.assertEqual(kconfig("left").get("CONFIG_ZMK_USB"), "y")
         self.assertNotEqual(kconfig("right").get("CONFIG_ZMK_USB"), "y")
+        self.assertNotEqual(kconfig("numpad").get("CONFIG_ZMK_USB"), "y")
 
-    def test_both_halves_have_bluetooth_and_cdc_recovery(self):
+    def test_every_part_has_bluetooth_and_cdc_recovery(self):
         for role in self.ROLES:
             config = kconfig(role)
             with self.subTest(role):
@@ -108,9 +159,11 @@ class ArtifactTest(unittest.TestCase):
             with self.subTest(role):
                 self.assertEqual(config.get("CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC"), "y")
                 self.assertNotEqual(config.get("CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL"), "y")
-        right = kconfig("right")
-        self.assertEqual(right.get("CONFIG_USB_DEVICE_STACK"), "y")
-        self.assertEqual(right.get("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT"), "y")
+        for role in ("right", "numpad"):
+            config = kconfig(role)
+            with self.subTest(role):
+                self.assertEqual(config.get("CONFIG_USB_DEVICE_STACK"), "y")
+                self.assertEqual(config.get("CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT"), "y")
 
     def test_split_link_resolved_to_the_robust_phy_and_deep_tx_pipeline(self):
         """CONFIG_ZMK_BLE_EXPERIMENTAL_CONN only requests the 1M PHY; whether
@@ -129,9 +182,22 @@ class ArtifactTest(unittest.TestCase):
         self.assertEqual(
             kconfig("left").get("CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE"), "16"
         )
-        self.assertEqual(
-            kconfig("right").get("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE"), "32"
-        )
+        self.assertEqual(kconfig("left").get("CONFIG_BT_MAX_CONN"), "7")
+        self.assertEqual(kconfig("left").get("CONFIG_BT_MAX_PAIRED"), "7")
+        for role in ("right", "numpad"):
+            self.assertEqual(
+                kconfig(role).get("CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE"),
+                "32",
+            )
+
+    def test_radio_resolved_to_the_maximum_transmit_power(self):
+        """The +8 dBm choice must survive Kconfig resolution on every part;
+        the controller's DBM value is what the radio is programmed with."""
+        for role in self.ROLES:
+            config = kconfig(role)
+            with self.subTest(role):
+                self.assertEqual(config.get("CONFIG_BT_CTLR_TX_PWR_PLUS_8"), "y")
+                self.assertEqual(config.get("CONFIG_BT_CTLR_TX_PWR_DBM"), "8")
 
     def test_excluded_features_are_absent(self):
         for role in self.ROLES:
@@ -196,24 +262,48 @@ class ArtifactTest(unittest.TestCase):
             for label, bit in re.findall(r"<\s*&(\w+)\s+(0x[0-9a-f]+)\s*>", body.group(1))
         ]
 
+    def compiled_scanner_expanders(self, role: str) -> tuple[str, ...]:
+        """The exact I2C devices a built role makes mandatory for scanning."""
+        text = (role_dir(role) / "zephyr.dts").read_text()
+        body = re.search(r"expanders = (.*?);$", text, re.M)
+        assert body, f"no expanders in the {role} devicetree"
+        return tuple(re.findall(r"<\s*&(\w+)\s*>", body.group(1)))
+
+    def test_compiled_scanner_uses_only_the_required_expanders(self):
+        for role in self.ROLES:
+            with self.subTest(role):
+                self.assertEqual(
+                    self.compiled_scanner_expanders(role),
+                    spec.SCANNER_EXPANDERS[role],
+                )
+
     def test_compiled_devicetree_has_the_exact_key_map(self):
         self.assertEqual(self.compiled_key_inputs("left"), spec.LEFT_INPUTS)
         self.assertEqual(self.compiled_key_inputs("right"), spec.RIGHT_INPUTS)
+        self.assertEqual(self.compiled_key_inputs("numpad"), spec.NUMPAD_INPUTS)
 
     def test_compiled_devicetree_excludes_unpopulated_bits(self):
-        for role, unused in (("left", spec.LEFT_UNUSED), ("right", spec.RIGHT_UNUSED)):
+        for role, unused in (
+            ("left", spec.LEFT_UNUSED),
+            ("right", spec.RIGHT_UNUSED),
+            ("numpad", spec.NUMPAD_UNUSED),
+        ):
             declared = set(self.compiled_key_inputs(role))
             for label, bits in unused.items():
                 for bit in bits:
                     with self.subTest(f"{role} {label} bit {bit}"):
                         self.assertNotIn((label, bit), declared)
 
-    def test_only_the_peripheral_offsets_its_columns(self):
+    def test_only_the_peripherals_offset_their_columns(self):
         left = (role_dir("left") / "zephyr.dts").read_text()
         right = (role_dir("right") / "zephyr.dts").read_text()
-        offset = re.search(r"col-offset = <\s*(0x[0-9a-f]+|\d+)\s*>", right)
-        self.assertIsNotNone(offset)
-        self.assertEqual(int(offset.group(1), 0), spec.RIGHT_COL_OFFSET)
+        numpad = (role_dir("numpad") / "zephyr.dts").read_text()
+        right_off = re.search(r"col-offset = <\s*(0x[0-9a-f]+|\d+)\s*>", right)
+        pad_off = re.search(r"col-offset = <\s*(0x[0-9a-f]+|\d+)\s*>", numpad)
+        self.assertIsNotNone(right_off)
+        self.assertIsNotNone(pad_off)
+        self.assertEqual(int(right_off.group(1), 0), spec.RIGHT_COL_OFFSET)
+        self.assertEqual(int(pad_off.group(1), 0), spec.NUMPAD_COL_OFFSET)
         self.assertNotIn("col-offset", left)
 
     def test_compiled_transform_covers_every_position(self):
@@ -249,6 +339,20 @@ class ArtifactTest(unittest.TestCase):
             found = sorted(int(a, 16) for a in re.findall(r"keys@(\w+) \{", text))
             with self.subTest(role):
                 self.assertEqual(found, sorted(spec.EXPANDER_ADDRESSES.values()))
+
+    def test_compiled_devicetree_runs_the_bus_and_scanner_as_specified(self):
+        for role in self.ROLES:
+            text = (role_dir(role) / "zephyr.dts").read_text()
+            i2c = re.search(r"i2c@40003000 \{(.*?)\n\t\t\};", text, re.S)
+            kscan = re.search(r'compatible = "nocfree,kscan-pca9555";(.*?)\n\t\};', text, re.S)
+            with self.subTest(role):
+                self.assertIsNotNone(i2c)
+                self.assertIsNotNone(kscan)
+                self.assertEqual(dt_int(i2c.group(1), "clock-frequency"), spec.BUS_HZ)
+                self.assertEqual(
+                    dt_int(kscan.group(1), "debounce-scan-period-ms"), spec.ACTIVE_SCAN_MS
+                )
+                self.assertEqual(dt_int(kscan.group(1), "poll-period-ms"), spec.IDLE_POLL_MS)
 
     def test_image_leaves_headroom_in_the_slot(self):
         for role in self.ROLES:

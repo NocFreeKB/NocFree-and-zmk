@@ -24,7 +24,7 @@ something that is not the application.
 
 Two routes, in order of preference.
 
-**1. 1200-baud touch (both halves).** Both images expose a USB CDC serial
+**1. 1200-baud touch (every part).** Every image exposes a USB CDC serial
 interface. Opening it at 1200 baud requests a warm reset into the preserved UF2
 bootloader. This is the same convention Arduino and Adafruit tooling use.
 
@@ -34,14 +34,15 @@ stty -f /dev/tty.usbmodemXXXX 1200      # macOS
 stty -F /dev/ttyACMX 1200               # Linux
 ```
 
-**2. `Fn`+`Delete` (right half, split link required).** ZMK reset behaviours
-act on the half whose key triggered them, and `Delete` is a right-half key, so
-this reboots the **right** half into its bootloader — but only while that half
-is connected to the left over the split link, because the left half runs the
-keymap and forwards the behaviour. A right half that cannot pair — the main
-recovery scenario — must use the 1200-baud touch, which is exactly why it
-carries the CDC interface. The left half has no bootloader key at all; recover
-it with the touch.
+**2. `Fn`+`Delete` (right half) and `Fn`+numpad `F7` (numpad), split
+link required.** ZMK reset behaviours act on the part whose key triggered
+them, so these reboot the **right** half or the **numpad** into the
+bootloader — but only while that part is connected to the left over the
+split link, because the left half runs the keymap and forwards the
+behaviour. A peripheral that cannot pair — the main recovery scenario —
+must use the 1200-baud touch, which is exactly why it carries the CDC
+interface. The left half has no bootloader key at all; recover it with the
+touch.
 
 If your hardware exposes a reset control, the Adafruit nRF52 bootloader also
 supports its usual double-tap entry. This port has not verified whether that
@@ -50,19 +51,19 @@ control is accessible on these halves; do not rely on it.
 ## Order of operations
 
 Flash the **left** half first, and prove recovery on it before touching the
-right.
+right or the numpad.
 
-The left half presents USB HID, so it is the only half whose scanner, keymap and
-boot behaviour you can verify on its own. More importantly, it is where you can
-confirm that 1200-baud touch actually returns a half to the bootloader. Once
-that is demonstrated, flashing the right half — whose only recovery path that
-does not depend on a working split link is that same mechanism — is a known
-quantity rather than a bet.
+The left half presents USB HID, so it is the only part whose scanner, keymap
+and boot behaviour you can verify on its own. More importantly, it is where
+you can confirm that 1200-baud touch actually returns a part to the
+bootloader. Once that is demonstrated, flashing a peripheral — whose only
+recovery path that does not depend on a working split link is that same
+mechanism — is a known quantity rather than a bet.
 
 1. Flash the left half.
 2. Verify it boots, enumerates, and types over USB.
 3. Trigger 1200-baud touch and confirm the bootloader volume returns.
-4. Re-flash the left half, then flash the right.
+4. Re-flash the left half, then flash the right, then the numpad.
 
 ## Stop conditions
 

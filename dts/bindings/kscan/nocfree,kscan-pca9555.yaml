@@ -10,8 +10,8 @@ description: |
   per key.
 
   The scanner owns the expander configuration and polarity-inversion registers
-  and verifies them at init, so a warm MCU reset cannot leave stale hardware
-  inversion in place. See docs/architecture.md.
+  and verifies them before accepting input, retrying after errors, so a warm
+  MCU reset cannot leave stale hardware inversion in place. See docs/architecture.md.
 
 compatible: "nocfree,kscan-pca9555"
 
@@ -55,7 +55,9 @@ properties:
       Poll period while any key is pressed or debouncing. One scan reads every
       expander over I2C, so this must comfortably exceed the total transfer
       time for the configured bus speed or the scanner cannot hold its
-      schedule. See docs/architecture.md for the budget.
+      schedule. The default suits a 100 kHz bus with three expanders; the
+      board files set the 400 kHz values. See docs/architecture.md for the
+      budget.
 
   poll-period-ms:
     type: int
@@ -63,3 +65,4 @@ properties:
     description: |
       Poll period while every key is released and stable. On a split keyboard
       this also bounds how stale one half's view can be relative to the other.
+      The default suits a 100 kHz bus; the board files set the 400 kHz value.

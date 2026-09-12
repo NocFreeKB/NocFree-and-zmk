@@ -135,9 +135,9 @@ Contributors must submit only content they have the right to release under the M
 
 ## 9. Community ZMK Module in This Repository
 
-This repository also contains a community ZMK keyboard module, `zmk-keyboard-nocfree-and`, providing a minimum ANSI left/right port built on the interfaces documented above. The left half is the ZMK split central and presents Bluetooth or USB HID to the computer; the right half is a Bluetooth split peripheral. It is community work covered by section 8, not official NocFree firmware, and the disclaimer in section 1 applies in full.
+This repository also contains a community ZMK keyboard module, `zmk-keyboard-nocfree-and`, providing a minimum ANSI left/right/numpad port built on the interfaces documented above. The left half is the ZMK split central and presents Bluetooth or USB HID to the computer; the right half and numpad are Bluetooth split peripherals. The numpad is not a standalone host keyboard in this port. It is community work covered by section 8, not official NocFree firmware, and the disclaimer in section 1 applies in full.
 
-Numpad, factory USB receiver, 2.4 GHz, battery reporting, backlighting, and indicators are deliberately not included.
+Factory USB receiver, 2.4 GHz, battery reporting, backlighting, and indicators are deliberately not included. The numpad's 21-key input order comes from a separately audited and physically accepted hardware map. A USB diagnostic on this unit additionally confirmed its two populated expanders and rejected unused address `0x24` as a scanner dependency; each newly built image still requires its own physical key-by-key acceptance test.
 
 | Document | Contents |
 |---|---|

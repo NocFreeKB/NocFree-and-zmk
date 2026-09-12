@@ -29,7 +29,7 @@ CONFIG_CLOCK_CONTROL_NRF=y
 CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
 CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC_CALIBRATION=y
 
-# The right half is a split peripheral: it has no host-facing HID output.
+# The numpad is a split peripheral: it has no host-facing HID output.
 CONFIG_ZMK_BLE=y
 
 # No battery source is declared: the ADC and divider-enable pins are not
@@ -37,11 +37,10 @@ CONFIG_ZMK_BLE=y
 # Battery Service with nothing behind it.
 CONFIG_ZMK_BATTERY_REPORTING=n
 
-# USB is brought up only for the CDC recovery interface, so this half keeps a
-# host-driven bootloader path that does not depend on the split link. (Fn+Del
-# does reach this half's bootloader, but only while it is connected to the
-# central.) With CONFIG_ZMK_USB unset ZMK never calls usb_enable(), so
-# INITIALIZE_AT_BOOT is the line that actually enumerates USB here.
+# USB is brought up only for the CDC recovery interface, so this part keeps a
+# host-driven bootloader path that does not depend on the split link. With
+# CONFIG_ZMK_USB unset ZMK never calls usb_enable(), so INITIALIZE_AT_BOOT is
+# the line that actually enumerates USB here.
 CONFIG_USB_DEVICE_STACK=y
 CONFIG_USB_DEVICE_INITIALIZE_AT_BOOT=y
 CONFIG_SERIAL=y
@@ -50,7 +49,7 @@ CONFIG_USB_CDC_ACM=y
 CONFIG_CDC_ACM_DTE_RATE_CALLBACK_SUPPORT=y
 
 # Keep the split link on the 1M PHY; see the left defconfig for the full
-# rationale. Set on both halves so neither side can negotiate 2M.
+# rationale. Set on every part so none can negotiate 2M.
 CONFIG_ZMK_BLE_EXPERIMENTAL_CONN=y
 
 # Deeper controller buffers absorb short fades; the reliability module also
@@ -64,7 +63,7 @@ CONFIG_BT_CONN_TX_MAX=8
 CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE=32
 
 # Transmit at the radio's maximum, +8 dBm, instead of the 0 dBm default; see
-# the left defconfig and docs/architecture.md for the rationale. On this half
+# the left defconfig and docs/architecture.md for the rationale. On this part
 # it applies to the link back to the central. Both directions of the split
 # link gain margin only when every part sets it.
 CONFIG_BT_CTLR_TX_PWR_PLUS_8=y
