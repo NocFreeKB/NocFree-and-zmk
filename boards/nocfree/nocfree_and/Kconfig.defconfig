@@ -9,6 +9,14 @@ config ZMK_KEYBOARD_NAME
 config ZMK_SPLIT_ROLE_CENTRAL
     default y
 
+# The number of split peripherals is deliberately NOT set here. ZMK gives
+# ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS a default of its own in
+# app/src/split/bluetooth/Kconfig.defaults, which its Kconfig sources before
+# Zephyr reads a board's Kconfig.defconfig, and Kconfig keeps the first
+# default it meets -- so a `default 2` here is silently shadowed and the
+# numpad never gets a slot. The count is assigned in the left defconfig
+# instead, where a plain assignment beats any default.
+
 endif # BOARD_NOCFREE_AND_LEFT
 
 if BOARD_NOCFREE_AND_RIGHT
@@ -18,7 +26,17 @@ config ZMK_KEYBOARD_NAME
 
 endif # BOARD_NOCFREE_AND_RIGHT
 
-if BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT
+if BOARD_NOCFREE_AND_NUMPAD
+
+# At most 15 characters: Zephyr's Bluetooth host requires the device name to
+# be shorter than BT_DEVICE_NAME_MAX, which ZMK sets to 16 so the name fits
+# in the advertising data. "NocFree & Numpad" is 16 and does not build.
+config ZMK_KEYBOARD_NAME
+    default "NocFree & Pad"
+
+endif # BOARD_NOCFREE_AND_NUMPAD
+
+if BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT || BOARD_NOCFREE_AND_NUMPAD
 
 config BOARD
     default "nocfree_and"
@@ -26,4 +44,4 @@ config BOARD
 config ZMK_SPLIT
     default y
 
-endif # BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT
+endif # BOARD_NOCFREE_AND_LEFT || BOARD_NOCFREE_AND_RIGHT || BOARD_NOCFREE_AND_NUMPAD

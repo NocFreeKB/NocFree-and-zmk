@@ -27,39 +27,45 @@
 
     /*
      * The keys are not an electrical row/column matrix: every key has its own
-     * expander input. The transform is therefore a single logical row of 84
+     * expander input. The transform is therefore a single logical row of 105
      * independent columns, listed here in visual reading order.
      *
-     * Columns 0-36 are the left half and columns 37-83 are the right half.
-     * Each half reports its own local column index; the right half shifts its
-     * indices into the second range with col-offset, so both halves resolve to
-     * the same global keymap positions. That is what lets the split peripheral
+     * Columns 0-36 are the left half, 37-83 the right half, and 84-104 the
+     * numpad. Each part reports its own local column index; the right half
+     * and numpad shift theirs with col-offset so every part resolves to the
+     * same global keymap positions. That is what lets a split peripheral
      * send absolute positions to the central.
      */
     matrix_transform0: keymap_transform_0 {
         compatible = "zmk,matrix-transform";
         rows = <1>;
-        columns = <84>;
+        columns = <105>;
 
         map = <
             /* Function row */
             RC(0,0)  RC(0,1)  RC(0,2)  RC(0,3)  RC(0,4)  RC(0,5)  RC(0,6)
             RC(0,37) RC(0,38) RC(0,39) RC(0,40) RC(0,41) RC(0,42) RC(0,43) RC(0,44)
+            RC(0,84) RC(0,85) RC(0,86) RC(0,87)
             /* Number row */
             RC(0,7)  RC(0,8)  RC(0,9)  RC(0,10) RC(0,11) RC(0,12) RC(0,13)
             RC(0,45) RC(0,46) RC(0,47) RC(0,48) RC(0,49) RC(0,50) RC(0,51) RC(0,52)
+            RC(0,88) RC(0,89) RC(0,90) RC(0,91)
             /* Tab row */
             RC(0,14) RC(0,15) RC(0,16) RC(0,17) RC(0,18) RC(0,19)
             RC(0,53) RC(0,54) RC(0,55) RC(0,56) RC(0,57) RC(0,58) RC(0,59) RC(0,60)
+            RC(0,92) RC(0,93) RC(0,94) RC(0,95)
             /* Home row */
             RC(0,20) RC(0,21) RC(0,22) RC(0,23) RC(0,24) RC(0,25)
             RC(0,61) RC(0,62) RC(0,63) RC(0,64) RC(0,65) RC(0,66) RC(0,67) RC(0,68)
+            RC(0,96) RC(0,97) RC(0,98)
             /* Shift row */
             RC(0,26) RC(0,27) RC(0,28) RC(0,29) RC(0,30) RC(0,31)
             RC(0,69) RC(0,70) RC(0,71) RC(0,72) RC(0,73) RC(0,74) RC(0,75) RC(0,76)
+            RC(0,99) RC(0,100) RC(0,101) RC(0,102)
             /* Bottom row */
             RC(0,32) RC(0,33) RC(0,34) RC(0,35) RC(0,36)
             RC(0,77) RC(0,78) RC(0,79) RC(0,80) RC(0,81) RC(0,82) RC(0,83)
+            RC(0,103) RC(0,104)
         >;
     };
 };
@@ -85,16 +91,21 @@
 /*
  * Key-input bus.
  *
- * Standard mode (100 kHz) is the conservative default for this port. NocFree
- * documents 400 kHz for the factory firmware and the PCA9555 family is rated
- * for it, but bus margin depends on the interconnect capacitance and pull-up
- * values of a specific unit, which this port has not measured. Any bus that
- * works at 400 kHz also works at 100 kHz, so standard mode is the setting that
- * is safe under either assumption. See docs/architecture.md before raising it.
+ * Fast mode (400 kHz) is the speed NocFree documents for the factory firmware
+ * on this bus (repository porting guide, section 4.1), and the PCA9555 family
+ * is rated for it. It cuts a three-expander scan from about 1.5 ms to about
+ * 0.5 ms, which is what pays for the scan periods in each board file.
+ *
+ * Bus margin still depends on the interconnect capacitance and pull-up values
+ * of a specific unit, which this port has not put a scope on. A bus that does
+ * not hold up at this speed shows as read errors, which the scanner holds key
+ * state across and logs, or as chatter on a key. If either appears, drop this
+ * to I2C_BITRATE_STANDARD and widen the scan periods to 3 ms active / 10 ms
+ * idle in each board file. See docs/architecture.md.
  */
 &i2c0 {
     status = "okay";
-    clock-frequency = <I2C_BITRATE_STANDARD>;
+    clock-frequency = <I2C_BITRATE_FAST>;
     pinctrl-0 = <&i2c0_default>;
     pinctrl-1 = <&i2c0_sleep>;
     pinctrl-names = "default", "sleep";

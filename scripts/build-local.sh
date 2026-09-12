@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# Build both firmware images from a clean checkout using only public,
+# Build the three firmware images from a clean checkout using only public,
 # pinned dependencies.
 #
 #   ./scripts/build-local.sh [workspace-dir]
@@ -42,7 +42,7 @@ docker run --rm ${ZMK_BUILD_PLATFORM:+--platform "${ZMK_BUILD_PLATFORM}"} \
         west update --fetch-opt=--filter=tree:0
         west zephyr-export
 
-        for role in left right; do
+        for role in left right numpad; do
             west build -p -s zmk/app -d "/ws/build/${role}" \
                 -b "nocfree_and_${role}/nrf52833/zmk" \
                 -- -DZMK_CONFIG=/ws/config -DZMK_EXTRA_MODULES=/module
@@ -51,6 +51,6 @@ docker run --rm ${ZMK_BUILD_PLATFORM:+--platform "${ZMK_BUILD_PLATFORM}"} \
 
 echo
 echo "Artifacts:"
-for role in left right; do
+for role in left right numpad; do
     ls -l "${WS}/build/${role}/zephyr/zmk.uf2" 2>/dev/null || true
 done

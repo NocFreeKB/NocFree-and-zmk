@@ -5,3 +5,5 @@ include:
     artifact-name: nocfree_and_left
   - board: nocfree_and_right/nrf52833/zmk
     artifact-name: nocfree_and_right
+  - board: nocfree_and_numpad/nrf52833/zmk
+    artifact-name: nocfree_and_numpad

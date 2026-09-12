@@ -67,8 +67,29 @@ CONFIG_BT_BUF_ACL_TX_COUNT=8
 CONFIG_BT_L2CAP_TX_BUF_COUNT=8
 CONFIG_BT_CONN_TX_MAX=8
 
-# Queue of per-position events received from the peripheral. This is also the
-# queue that absorbs the release-everything burst raised when a peripheral
-# disconnects; the default of 5 silently drops releases beyond it if more
-# keys are held at that moment.
+# Queue of per-position events received from the peripherals. This is also
+# the queue that absorbs the release-everything burst raised when a
+# peripheral disconnects; the default of 5 silently drops releases beyond it
+# if more keys are held at that moment.
 CONFIG_ZMK_SPLIT_BLE_CENTRAL_POSITION_QUEUE_SIZE=16
+
+# Two split peripherals: the right half and the numpad. This has to be an
+# assignment here rather than a `default` in Kconfig.defconfig, because ZMK
+# gives the symbol its own default earlier in Kconfig parse order and the
+# first default wins; the assignment beats both.
+CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2
+
+# Two split peripherals plus five host BLE profiles.
+CONFIG_BT_MAX_CONN=7
+CONFIG_BT_MAX_PAIRED=7
+
+# Transmit at the radio's maximum, +8 dBm, instead of the 0 dBm default. ZMK's
+# own documentation recommends this setting for unreliable links, notes that
+# it also improves the link between split halves, and describes the power
+# cost as negligible: a keyboard's radio transmits for a small fraction of
+# each connection interval. On this half it applies to the host link and to
+# both peripheral links. It changes how loudly this half talks, not how it
+# listens; the receive side is what the 1M PHY choice above protects. Neither
+# the added current draw nor the field strength has been measured on this
+# hardware. See docs/architecture.md.
+CONFIG_BT_CTLR_TX_PWR_PLUS_8=y

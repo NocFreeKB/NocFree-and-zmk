@@ -6,7 +6,9 @@
 
 /*
  * The key-input I2C bus. NocFree publishes SDA on P0.11 and SCL on P1.09 for
- * both halves; see section 4 of the repository porting guide.
+ * the left half, right half and numpad; see section 4 of the repository
+ * porting guide. The numpad uses the same pins in the separately audited and
+ * physically accepted hardware configuration used to validate its input map.
  */
 &pinctrl {
     i2c0_default: i2c0_default {
